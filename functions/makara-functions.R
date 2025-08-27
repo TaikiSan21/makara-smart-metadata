@@ -156,8 +156,8 @@ checkMakTemplate <- function(x, templates, mandatory, ncei=TRUE) {
             # and not UNUSABLE
             if(n == 'recordings' &&
                m %in% onlyNotLost) {
-                notLost <- sapply(thisData$recording_device_lost, isFALSE)
-                notUnusable <- thisData$recording_quality_code != 'UNUSABLE'
+                notLost <- !sapply(thisData$recording_device_lost, isTRUE)
+                notUnusable <- thisData$recording_quality_code != 'UNUSABLE' | is.na(thisData$recording_quality_code)
                 naVals <- naVals & notLost & notUnusable
             }
             if(any(naVals)) {
@@ -226,7 +226,8 @@ makeValidTime <- function(x) {
         datetime <- parse_date_time(
             val,
             orders=c('%Y-%m-%d %H:%M:%S',
-                     '%Y/%m/%d %H:%M:%S'),
+                     '%Y/%m/%d %H:%M:%S',
+                     '%Y-%m-%dT%H:%M:%SZ'),
             truncated = 3,
             tz='UTC',
             quiet=TRUE,
@@ -529,8 +530,7 @@ parseDeviceId <- function(x) {
     x
 }
 
-
-formatDatetime <- function(date, time, warn=FALSE) {
+formatDatetime <- function(date, time, warn=FALSE, type=c('char', 'posix')) {
     date[is.na(date)] <- ''
     time[is.na(time)] <- ''
     datetime <- paste0(date, ' ', time)
@@ -542,14 +542,18 @@ formatDatetime <- function(date, time, warn=FALSE) {
     datetime <- parse_date_time(
         datetime,
         orders=c('%Y-%m-%d %H:%M:%S',
-                 '%Y/%m/%d %H:%M:%S'),
+                 '%Y/%m/%d %H:%M:%S',
+                 '%m/%d/%Y %H:%M:%S'),
         truncated = 3,
         tz='UTC')
     noParse <- is.na(datetime) & !bothMissing
     if(any(noParse) && isTRUE(warn)) {
         warning(sum(noParse), ' dates could not be parsed')
     }
-    datetime <- psxTo8601(datetime)
+    type <- match.arg(type)
+    if(type == 'char') {
+        return(psxTo8601(datetime))
+    }
     datetime
 }
 

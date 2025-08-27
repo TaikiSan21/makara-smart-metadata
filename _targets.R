@@ -528,6 +528,19 @@ list(
         result <- list(deployments=deployment, fpod=fpod)
         result
     }),
+    # FPOD ----
+    tar_target(fpod_times, {
+        fpodFile <- 'FPOD_Dates.csv'
+        data <- read.csv(fpodFile, stringsAsFactors = FALSE)
+        data$fpod_start <- formatDatetime(date=data$start_date,
+                                          time=data$start_time,
+                                          warn=FALSE)
+        data$fpod_end <- formatDatetime(date=data$end_date,
+                                        time=data$end_time,
+                                        warn=FALSE)
+        data <- rename(data, deployment_code=deployment)
+        data
+    }),
     # combine sources ----
     tar_target(combined_data, {
         # removing one NA deployment
@@ -609,8 +622,8 @@ list(
         rec_out <- select(result, any_of(names(templates$recordings)))
         fpodCommonCols <- c('organization_code', 
                             'deployment_code', 
-                            'recording_start_datetime', 
-                            'recording_end_datetime',
+                            # 'recording_start_datetime', 
+                            # 'recording_end_datetime',
                             'recording_timezone')
         fpod_out <- left_join(
             select(rec_out, all_of(fpodCommonCols)),
@@ -618,7 +631,13 @@ list(
                    'recording_comments'='depth_comment'),
             by='deployment_code'
         ) %>% 
-            filter(!is.na(fpod_device))
+            filter(!is.na(fpod_device)) %>% 
+            left_join(
+                select(filter(fpod_times, !is.na(deployment_code)),
+                       deployment_code, 
+                       recording_start_datetime=fpod_start,
+                       recording_end_datetime=fpod_end),
+                by='deployment_code')
         # FPOD is mostly constants
         fpod_out$recording_device_codes <- fpod_out$fpod_device
         fpod_out$recording_duration_secs <- constants$fpod_duration
@@ -672,7 +691,8 @@ list(
 # FPODS - default sample rate and freq range 1 million 10 bit samples per second
 ## frange is 20kHz - 220kHz
 
-# TODO fpod stuff Checking comments
+# TODO 
+# FPOD get their specific dates - wai
 # checking for previously lost updates
 
 # are we going to have non-soundstrap data to run? Currently only place to get instrument
