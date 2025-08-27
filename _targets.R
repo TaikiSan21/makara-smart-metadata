@@ -21,6 +21,7 @@ reload_data <- 'thorough'
 
 list(
     # parameters ----
+    # Values you can adjust to change how things run
     tar_target(params, {
         list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
@@ -32,7 +33,7 @@ list(
         )
     }),
     # constants ----
-    # any hard coded values here for transparency
+    # Put any hard coded values here for transparency
     tar_target(constants, {
         list(
             'platform' = 'BOTTOM_MOUNTED_MOORING',
@@ -49,158 +50,10 @@ list(
     # templates ----
     tar_target(template_dir, 'templates'),
     tar_target(templates, {
-        tempFiles <- list.files(template_dir, pattern='csv$', full.names=TRUE, recursive=TRUE)
-        result <- lapply(tempFiles, function(x) {
-            table <- read.csv(x, stringsAsFactors=FALSE)
-            table <- lapply(table, as.character)
-            table
-        })
-        names(result) <- gsub('\\.csv', '', basename(tempFiles))
-        numCols <- list(
-            'analyses' = c('analysis_sample_rate_khz',
-                           'analysis_min_frequency_khz',
-                           'analysis_max_frequency_khz'),
-            'detections' = c('detection_effort_secs',
-                             'detection_n_validated',
-                             'detection_n_total',
-                             'detection_latitude',
-                             'detection_longitude',
-                             'detection_received_level_db',
-                             'detection_n_animals',
-                             'detection_n_animals_min',
-                             'detection_n_animals_max',
-                             'localization_latitude',
-                             'localization_latitude_min',
-                             'localization_latitude_max',
-                             'localization_longitude',
-                             'localization_longitude_min',
-                             'localization_longitude_max',
-                             'localization_distance_m',
-                             'localization_distance_m_min',
-                             'localization_distance_m_max',
-                             'localization_bearing',
-                             'localization_bearing_min',
-                             'localization_bearing_max',
-                             'localization_depth_n_signals',
-                             'localizatoin_depth_m',
-                             'localization_depth_m_min',
-                             'localization_depth_m_max'),
-            'deployments' = c('deployment_water_depth_m', 
-                              'deployment_latitude', 
-                              'deployment_longitude',
-                              'recovery_latitude',
-                              'recovery_longitude'),
-            'recordings' = c('recording_duration_secs',
-                             'recording_interval_secs',
-                             'recording_sample_rate_khz',
-                             'recording_bit_depth',
-                             'recording_channel',
-                             'recording_n_channels',
-                             'recording_usable_min_frequency_khz',
-                             'recording_usable_max_frequency_khz',
-                             'recording_device_depth_m'),
-            'recording_intervals' = c('recording_interval_channel',
-                                      'recording_interval_min_frequency_khz',
-                                      'recording_interval_max_frequency_khz'),
-            'devices' = c(),
-            'projects' = c(),
-            'sites' = c('site_latitude', 'site_longitude'),
-            'track_positions' = c('track_position_latitude',
-                                  'track_position_longitude',
-                                  'track_position_speed_knots',
-                                  'track_position_depth_m'),
-            'tracks' = c()
-            
-        )
-        boolCols <- list(
-            'analyses' = c('analysis_release_data',
-                           'analysis_release_pacm'),
-            'recordings' = c('recording_redacted',
-                             'recording_device_lost'),
-            'deployments' = c(),
-            'detections' = c(),
-            'recording_intervals' = c(),
-            'devices' = c(),
-            'projects' = c(),
-            'sites' = c(),
-            'track_positions' = c(),
-            'tracks' = c()
-        )
-        for(n in names(result)) {
-            for(col in numCols[[n]]) {
-                result[[n]][[col]] <- as.numeric(result[[n]][[col]])
-            }
-            for(col in boolCols[[n]]) {
-                result[[n]][[col]] <- as.logical(result[[n]][[col]])
-            }
-        }
-        result
-    }),
-    tar_target(mandatory_fields, {
-        list(
-            'deployments' = list(
-                'always' = c('organization_code', 'deployment_code', 'deployment_platform_type_code', 
-                             'deployment_datetime', 'deployment_latitude', 'deployment_longitude'),
-                'ncei' = c('project_code','site_code', 'recovery_datetime', 'recovery_longitude', #site if stationary
-                           'recovery_latitude') 
-            ),
-            'detections' =  list(
-                'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code',
-                             'analysis_organization_code',
-                             'detection_start_datetime', 'detection_end_datetime' ,
-                             'detection_effort_secs', 'detection_sound_source_code',
-                             'detection_call_type_code', 'detection_result_code'),
-                'ncei' = c()
-            ),
-            'analyses' = list(
-                'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code', 'recording_codes',
-                             'analysis_organization_code',
-                             'analysis_sound_source_codes', 'analysis_granularity_code', 
-                             'analysis_sample_rate_khz', 'analysis_processing_code', 
-                             'analysis_quality_code', 'analysis_protocol_reference',
-                             'analysis_release_data', 'analysis_release_pacm', 'detector_codes'),
-                'ncei' = c('analysis_start_datetime', 'analysis_end_datetime', 'analysis_min_frequency_khz',
-                           'analysis_max_frequency_khz')
-            ),
-            'recordings' = list(
-                'always' = c('organization_code', 'deployment_code', 'recording_code', 
-                             'recording_device_codes', 'recording_start_datetime', 'recording_interval_secs',
-                             'recording_sample_rate_khz', 'recording_duration_secs',
-                             'recording_n_channels', 'recording_timezone'), # many are only if not lsot
-                'ncei' = c('recording_end_datetime', 'recording_bit_depth', 'recording_channel',
-                           'recording_quality_code', 'recording_device_depth_m', 'recording_json')
-            ),
-            'recording_intervals' = list(
-                'always' = c('organization_code', 'deployment_code', 'recording_code',
-                             'recording_interval_quality_code'),
-                'ncei' = c()
-            ),
-            'devices' = list(
-                'always' = c('organization_code', 'device_code', 'device_type_code'),
-                'ncei' = c()
-            ),
-            'projects' = list(
-                'always' = c('organization_code', 'project_code', 'project_contacts'),
-                'ncei' = c()
-            ),
-            'sites' = list(
-                'always' = c('organization_code', 'site_code'),
-                'ncei' = c()
-            ),
-            'track_positions' = list(
-                'always' = c('organization_code', 'deployment_code', 'track_code',
-                             'track_position_datetime',
-                             'track_position_latitude',
-                             'track_position_longitude'),
-                'ncei' = c()
-            ),
-            'tracks' = list(
-                'always' = c('organization_code', 'deployment_code', 'track_code'),
-                'ncei' = c()
-            )
-        )
+        formatBasicTemplates(template_dir)
     }),
     # db tables ----
+    # secrets has DB passwords, smartsheets key and IDs
     tar_target(secrets_file, '.secrets/secrets.yml'),
     tar_target(secrets, {
         read_yaml(secrets_file)
@@ -212,7 +65,7 @@ list(
             port = secrets$makara_port,
             dbname =secrets$makara_dbname,
             user = secrets$makara_user,
-            password = secrets$makara_pw # replace with actual password
+            password = secrets$makara_pw
         ), silent=TRUE)
         if(inherits(con, 'try-error')) {
             warning('Could not connect to database to load new Makara data.')
@@ -241,13 +94,13 @@ list(
     }, cue=tar_cue(reload_data)),
     
     # google qaqc ----
-    tar_target(qaqc_g_file, 'QAQC.xlsx'),
     tar_target(qaqc_google_raw, {
         sheetId <- as_id(secrets$google_qaqc_sheet)
-        drive_download(file = sheetId, path=qaqc_g_file, overwrite = TRUE)
-        sheetNames <- excel_sheets(qaqc_g_file)
+        qaqc_file <- tempfile(fileext = '.xlsx')
+        drive_download(file = sheetId, path=qaqc_file, overwrite = TRUE)
+        sheetNames <- excel_sheets(qaqc_file)
         result <- lapply(sheetNames, function(x) {
-            one <- read_excel(qaqc_g_file, sheet=x, skip=5, col_types = 'list')
+            one <- read_excel(qaqc_file, sheet=x, skip=5, col_types = 'list')
             one$sheet_name <- x
             one <- janitor::clean_names(one)
             one
@@ -280,6 +133,9 @@ list(
             'soundfile_timezone_from_log_files' = 'recording_timezone'
         )
         
+        result <- bind_rows(lapply(qaqc_google_raw, function(x) {
+            formatGoogleQAQC(x, map=googsMap)
+        }))
         keepCols <- c(
             'organization_code',
             'deployment_code', #
@@ -305,70 +161,7 @@ list(
             'recording_timezone',
             'st_serial_number'
         )
-        timeCols <- c(
-            'recording_start_datetime',
-            'recording_end_datetime',
-            'deployment_datetime',
-            'recovery_datetime',
-            'recording_usable_start_datetime',
-            'recording_usable_end_datetime'
-        )
-        result <- bind_rows(lapply(qaqc_google_raw, function(x) {
-            if(ncol(x) <= 2) {
-                return(NULL)
-            }
-            one <- myRenamer(x, map=googsMap)
-            one <- one[!is.na(one$deployment_code), ]
-            if(!'st_serial_number' %in% names(one)) {
-                one$st_serial_number <- NA
-            }
-            one$st_serial_number <- as.character(one$st_serial_number)
-            for(t in c(timeCols, grep('compromised_data', names(one), value=TRUE))) {
-                one[[t]] <- googsTimeToChar(one[[t]], dropNaChar=TRUE)
-            }
-            for(i in seq_len(ncol(one))) {
-                if(is.list(one[[i]])) {
-                    one[[i]] <- unlist(one[[i]])
-                }
-            }
-
-            if(one$sheet_name[1] == 'Seamount' &&
-               !'recording_quality_code' %in% names(one)) {
-                one$recording_quality_code <- NA
-            }
-            one$recording_device_lost <- one$recording_device_lost == 'Y'
-            # special circumstance for lost to still deploy
-            lostAndNA <- one$recording_device_lost & is.na(one$pacm_db_status)
-            one$pacm_db_status[lostAndNA] <- 'LOST'
-            naCharCols <- c('soundfile_type_1', 'soundfile_type_2',
-                            grep('compromised_data', names(one), value=TRUE))
-            for(n in naCharCols) {
-                one[[n]] <- gsub('n/a', '', tolower(one[[n]]))
-                one[[n]][one[[n]] == ''] <- NA
-            }
-            one <- unite(one, 
-                         col='compromised_starts', 
-                         matches('compromised_data[0-9]_start'),
-                         na.rm=TRUE, 
-                         sep=';'
-            )
-            one <- unite(one, 
-                         col='compromised_ends', 
-                         matches('compromised_data[0-9]_end'),
-                         na.rm=TRUE, 
-                         sep=';'
-            )
-            
-            one <- combineColumns(one, 
-                                  into='recording_filetypes', 
-                                  columns=c('soundfile_type_1', 'soundfile_type_2'),
-                                  sep=',')
-            one$organization_code <- deployCodeToOrg(one$deployment_code)
-            one$recording_channel <- NA
-            one$recording_channel[one$recording_n_channels == 1] <- 1
-            select(one, all_of(keepCols))
-        }))
-        result 
+        select(result , all_of(keepCols))
     }),
     # smart sheets ----
     tar_target(data_upload_raw, {
@@ -636,7 +429,9 @@ list(
                 select(filter(fpod_times, !is.na(deployment_code)),
                        deployment_code, 
                        recording_start_datetime=fpod_start,
-                       recording_end_datetime=fpod_end),
+                       recording_usable_start_datetime=fpod_start,
+                       recording_end_datetime=fpod_end,
+                       recording_usable_end_datetime=fpod_end),
                 by='deployment_code')
         # FPOD is mostly constants
         fpod_out$recording_device_codes <- fpod_out$fpod_device
@@ -670,19 +465,14 @@ list(
         out <- checkMakTemplate(out,
                                 templates=templates,
                                 mandatory=mandatory_fields,
-                                ncei=FALSE)
+                                ncei=FALSE,
+                                dropEmpty = TRUE)
         out <- checkDbValues(out, db)
         checkWarnings(out)
         out
     }),
     tar_target(output_files, {
-        if(!dir.exists('outputs')) {
-            dir.create('outputs')
-        }
-        for(n in names(db_check)) {
-            outFile <- file.path('outputs', paste0(n, '.csv'))
-            write.csv(db_check[[n]], file=outFile, row.names=FALSE)
-        }
+        writeTemplateOutput(db_check, folder='outputs')
     })
 )
 
