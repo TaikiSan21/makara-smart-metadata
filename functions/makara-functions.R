@@ -1,9 +1,17 @@
 # Generic Makara ----
 # Packages: dplyr, tidyr, lubridate
+# map is list of form old=new
 myRenamer <- function(x, map) {
     if(is.data.frame(x)) {
         names(x) <- myRenamer(names(x), map)
         return(x)
+    }
+    # check if map is obviously backwards and fix it
+    if(!any(x %in% names(map)) &&
+       any(x %in% unlist(map))) {
+        newMap <- as.list(names(map))
+        names(newMap) <- unlist(map)
+        map <- newMap
     }
     for(val in names(map)) {
         if(val %in% x) {
