@@ -1,8 +1,9 @@
 #
-library(renv)
+if(!require('renv', quietly = TRUE)) {
+    install.packages('renv')
+}
 # run this once only to install packages
-renv::restore()
-
+renv::restore(library=.libPaths())
 
 # run this once - should store
 googledrive::drive_auth()
