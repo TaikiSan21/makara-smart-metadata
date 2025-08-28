@@ -15,6 +15,7 @@ tar_option_set(
 
 # Run the R scripts in the R/ folder with your custom functions:
 tar_source('functions/makara-functions.R')
+tar_source('functions/nefsc-metadata-functions.R')
 
 # Can be set to "always" or "never"
 reload_data <- 'thorough'
