@@ -1,7 +1,74 @@
 # Generic Makara Functions ----
 # Packages: dplyr, tidyr, lubridate
 
+## Constant values ----
+# List of mandatory fields for various tables
+mandatory_fields <- list(
+    'deployments' = list(
+        'always' = c('organization_code', 'deployment_code', 'deployment_platform_type_code', 
+                     'deployment_datetime', 'deployment_latitude', 'deployment_longitude'),
+        'ncei' = c('project_code','site_code', 'recovery_datetime', 'recovery_longitude', #site if stationary
+                   'recovery_latitude') 
+    ),
+    'detections' =  list(
+        'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code',
+                     'analysis_organization_code',
+                     'detection_start_datetime', 'detection_end_datetime' ,
+                     'detection_effort_secs', 'detection_sound_source_code',
+                     'detection_call_type_code', 'detection_result_code'),
+        'ncei' = c()
+    ),
+    'analyses' = list(
+        'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code', 'recording_codes',
+                     'analysis_organization_code',
+                     'analysis_sound_source_codes', 'analysis_granularity_code', 
+                     'analysis_sample_rate_khz', 'analysis_processing_code', 
+                     'analysis_quality_code', 'analysis_protocol_reference',
+                     'analysis_release_data', 'analysis_release_pacm', 'detector_codes'),
+        'ncei' = c('analysis_start_datetime', 'analysis_end_datetime', 'analysis_min_frequency_khz',
+                   'analysis_max_frequency_khz')
+    ),
+    'recordings' = list(
+        'always' = c('organization_code', 'deployment_code', 'recording_code', 
+                     'recording_device_codes', 'recording_start_datetime', 'recording_interval_secs',
+                     'recording_sample_rate_khz', 'recording_duration_secs',
+                     'recording_n_channels', 'recording_timezone'), # many are only if not lsot
+        'ncei' = c('recording_end_datetime', 'recording_bit_depth', 'recording_channel',
+                   'recording_quality_code', 'recording_device_depth_m', 'recording_json')
+    ),
+    'recording_intervals' = list(
+        'always' = c('organization_code', 'deployment_code', 'recording_code',
+                     'recording_interval_quality_code'),
+        'ncei' = c()
+    ),
+    'devices' = list(
+        'always' = c('organization_code', 'device_code', 'device_type_code'),
+        'ncei' = c()
+    ),
+    'projects' = list(
+        'always' = c('organization_code', 'project_code', 'project_contacts'),
+        'ncei' = c()
+    ),
+    'sites' = list(
+        'always' = c('organization_code', 'site_code'),
+        'ncei' = c()
+    ),
+    'track_positions' = list(
+        'always' = c('organization_code', 'deployment_code', 'track_code',
+                     'track_position_datetime',
+                     'track_position_latitude',
+                     'track_position_longitude'),
+        'ncei' = c()
+    ),
+    'tracks' = list(
+        'always' = c('organization_code', 'deployment_code', 'track_code'),
+        'ncei' = c()
+    )
+)
+
+## Functions ----
 # map is list of form old=new
+# renames either values in a vector or names of dataframe
 myRenamer <- function(x, map) {
     if(is.data.frame(x)) {
         names(x) <- myRenamer(names(x), map)
@@ -22,6 +89,8 @@ myRenamer <- function(x, map) {
     x
 }
 
+# combines a bunch of columns into one, optionally adding a prefix
+# to each column entry if it is not NA
 combineColumns <- function(x, into, columns, prefix=NULL, sep='; ', warnMissing=TRUE) {
     missing <- !columns %in% names(x)
     if(all(missing)) {
@@ -51,6 +120,8 @@ combineColumns <- function(x, into, columns, prefix=NULL, sep='; ', warnMissing=
     x
 }
 
+# pretty printing helper to print number of items in a list
+# n is a cutoff of max to show at once
 printN <- function(x, n=6, collapse=', ') {
     nItems <- length(x)
     if(nItems == 0) {
@@ -62,13 +133,51 @@ printN <- function(x, n=6, collapse=', ') {
     paste0(paste(x, collapse=collapse))
 }
 
+# formats a POSIXct object to 8601 format
 psxTo8601 <- function(x) {
     if(is.character(x)) {
         return(x)
     }
+    if(!inherits(x, 'POSIXct')) {
+        warning('Must be POSIXct or character')
+        return(x)
+    }
+    if(tz(x) != 'UTC') {
+        warning('Non-UTC timezone not yet supported')
+    }
     format(x, format='%Y-%m-%dT%H:%M:%SZ')
 }
 
+# create a POSIXct or full datetime character from separate date
+# and time character columns
+formatDatetime <- function(date, time, warn=TRUE, type=c('char', 'posix')) {
+    date[is.na(date)] <- ''
+    time[is.na(time)] <- ''
+    datetime <- paste0(date, ' ', time)
+    bothMissing <- datetime == ' '
+    if(any(bothMissing) && isTRUE(warn)) {
+        warning(sum(bothMissing), ' dates did not have a date or time component')
+    }
+    datetime[bothMissing] <- NA
+    datetime <- parse_date_time(
+        datetime,
+        orders=c('%Y-%m-%d %H:%M:%S',
+                 '%Y/%m/%d %H:%M:%S',
+                 '%m/%d/%Y %H:%M:%S'),
+        truncated = 3,
+        tz='UTC')
+    noParse <- is.na(datetime) & !bothMissing
+    if(any(noParse) && isTRUE(warn)) {
+        warning(sum(noParse), ' dates could not be parsed')
+    }
+    type <- match.arg(type)
+    if(type == 'char') {
+        return(psxTo8601(datetime))
+    }
+    datetime
+}
+
+# Helper for tracking warnings in various checking functions
 addWarning <- function(x, deployment, table, type, message) {
     if('warnings' %in% names(x)) {
         x$warnings <- addWarning(x$warnings, deployment=deployment, table=table,
@@ -78,7 +187,13 @@ addWarning <- function(x, deployment, table, type, message) {
     bind_rows(x, list(deployment=deployment, table=table, type=type, message=message))
 }
 
-checkMakTemplate <- function(x, templates, mandatory, ncei=FALSE, dropEmpty=FALSE) {
+# Check data against templates for missing mandatory data and other issues
+# x is a list with each table 
+# templates comes from `formatBasicTemplates`
+# mandatory is constant list 
+# ncei flag is whether to check columns that are only mandatory for NCEI
+# dropEmpty is flag whether to drop empty non-mandatory columns from output
+checkMakTemplate <- function(x, templates, mandatory=mandatory_fields, ncei=FALSE, dropEmpty=FALSE) {
     result <- templates[names(x)]
     onlyNotLost <- c('recording_start_datetime',
                      'recording_duration_secs',
@@ -195,6 +310,7 @@ checkMakTemplate <- function(x, templates, mandatory, ncei=FALSE, dropEmpty=FALS
     result
 }
 
+# Pretty printing helper for warnings created with `addWarning`
 checkWarnings <- function(x) {
     if(!'warnings' %in% names(x) ||
        nrow(x$warnings) == 0) {
@@ -217,6 +333,7 @@ checkWarnings <- function(x) {
         }
     })
 }
+# convert date characters to proper 8601 style output
 makeValidTime <- function(x) {
     out <- rep(NA_character_, length(x))
     for(i in seq_along(x)) {
@@ -241,26 +358,19 @@ makeValidTime <- function(x) {
     out
 }
 
-formatRecordingIntervals <- function(x) {
-    x <- x %>% 
-        mutate(compromised_starts=strsplit(compromised_starts, ';'),
-               compromised_ends=strsplit(compromised_ends, ';')) %>% 
-        unnest(cols=c('compromised_starts', 'compromised_ends')) %>% 
-        rename(recording_interval_start_datetime=compromised_starts,
-               recording_interval_end_datetime=compromised_ends)
-    x
-}
+# checkValidTimezone <- function(rec) {
+#     isBad <- !grepl('^UTC[+-]?[0-9]{0,4}$', rec$recording_timezone)
+#     if(any(isBad)) {
+#         warning(sum(isBad), ' deployments (', printN(rec$deployment_code[isBad], Inf),
+#                 ') have timezones that are invalid (', printN(unique(rec$recording_timezone[isBad]), Inf), 
+#                 ')')
+#     }
+#     rec
+# }
 
-checkValidTimezone <- function(rec) {
-    isBad <- !grepl('^UTC[+-]?[0-9]{0,4}$', rec$recording_timezone)
-    if(any(isBad)) {
-        warning(sum(isBad), ' deployments (', printN(rec$deployment_code[isBad], Inf),
-                ') have timezones that are invalid (', printN(unique(rec$recording_timezone[isBad]), Inf), 
-                ')')
-    }
-    rec
-}
-
+# Check if codes being used are actually in database
+# Currently checks recording_device_codes, deployment device_codes, project_codes,
+# site_codes, using organization_code in the check
 checkDbValues <- function(x, db) {
     warns <- vector('list', length=0)
     recDevCheck <- left_join(x$recordings,
@@ -329,6 +439,8 @@ checkDbValues <- function(x, db) {
     x
 }
 
+# Checks if deployments, recordings, and recording_intervals
+# are already in makara 
 checkAlreadyDb <- function(x, db) {
     # deployment and recording checko
     dep_rec <- left_join(
@@ -381,7 +493,7 @@ checkAlreadyDb <- function(x, db) {
     }
     x
 }
-
+# Only works after `checkAlreadyDb` run to create "new" column
 dropAlreadyDb <- function(x, drop=FALSE) {
     for(n in names(x)) {
         if('new' %in% names(x[[n]])) {
@@ -395,6 +507,7 @@ dropAlreadyDb <- function(x, drop=FALSE) {
     x
 }
 
+# checks to drop non UTF-8 chars in character columns
 fixUTF8 <- function(x) {
     x |>
         mutate(
@@ -402,6 +515,7 @@ fixUTF8 <- function(x) {
         )
 }
 
+# writes template formatted CSV files to a folder - last step
 writeTemplateOutput <- function(data, folder='outputs') {
     if(!dir.exists(folder)) {
         dir.create(folder)
@@ -411,7 +525,6 @@ writeTemplateOutput <- function(data, folder='outputs') {
         data[[n]] %>% 
             fixUTF8 %>% 
             write.csv(file=outFile, row.names=FALSE, na='')
-        # write.csv(fixUTF8(data[[n]]), file=outFile, row.names=FALSE, na='')
     }
 }
 
@@ -420,7 +533,8 @@ writeTemplateOutput <- function(data, folder='outputs') {
 formatBasicTemplates <- function(folder) {
     tempFiles <- list.files(folder, pattern='csv$', full.names=TRUE, recursive=TRUE)
     result <- lapply(tempFiles, function(x) {
-        table <- read.csv(x, stringsAsFactors=FALSE)
+        # sometimes incomplete final line warning, ignore it
+        table <- suppressWarnings(read.csv(x, stringsAsFactors=FALSE))
         table <- lapply(table, as.character)
         table
     })
@@ -505,67 +619,3 @@ formatBasicTemplates <- function(folder) {
     }
     result
 }
-
-## Constant values ----
-mandatory_fields <- list(
-    'deployments' = list(
-        'always' = c('organization_code', 'deployment_code', 'deployment_platform_type_code', 
-                     'deployment_datetime', 'deployment_latitude', 'deployment_longitude'),
-        'ncei' = c('project_code','site_code', 'recovery_datetime', 'recovery_longitude', #site if stationary
-                   'recovery_latitude') 
-    ),
-    'detections' =  list(
-        'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code',
-                     'analysis_organization_code',
-                     'detection_start_datetime', 'detection_end_datetime' ,
-                     'detection_effort_secs', 'detection_sound_source_code',
-                     'detection_call_type_code', 'detection_result_code'),
-        'ncei' = c()
-    ),
-    'analyses' = list(
-        'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code', 'recording_codes',
-                     'analysis_organization_code',
-                     'analysis_sound_source_codes', 'analysis_granularity_code', 
-                     'analysis_sample_rate_khz', 'analysis_processing_code', 
-                     'analysis_quality_code', 'analysis_protocol_reference',
-                     'analysis_release_data', 'analysis_release_pacm', 'detector_codes'),
-        'ncei' = c('analysis_start_datetime', 'analysis_end_datetime', 'analysis_min_frequency_khz',
-                   'analysis_max_frequency_khz')
-    ),
-    'recordings' = list(
-        'always' = c('organization_code', 'deployment_code', 'recording_code', 
-                     'recording_device_codes', 'recording_start_datetime', 'recording_interval_secs',
-                     'recording_sample_rate_khz', 'recording_duration_secs',
-                     'recording_n_channels', 'recording_timezone'), # many are only if not lsot
-        'ncei' = c('recording_end_datetime', 'recording_bit_depth', 'recording_channel',
-                   'recording_quality_code', 'recording_device_depth_m', 'recording_json')
-    ),
-    'recording_intervals' = list(
-        'always' = c('organization_code', 'deployment_code', 'recording_code',
-                     'recording_interval_quality_code'),
-        'ncei' = c()
-    ),
-    'devices' = list(
-        'always' = c('organization_code', 'device_code', 'device_type_code'),
-        'ncei' = c()
-    ),
-    'projects' = list(
-        'always' = c('organization_code', 'project_code', 'project_contacts'),
-        'ncei' = c()
-    ),
-    'sites' = list(
-        'always' = c('organization_code', 'site_code'),
-        'ncei' = c()
-    ),
-    'track_positions' = list(
-        'always' = c('organization_code', 'deployment_code', 'track_code',
-                     'track_position_datetime',
-                     'track_position_latitude',
-                     'track_position_longitude'),
-        'ncei' = c()
-    ),
-    'tracks' = list(
-        'always' = c('organization_code', 'deployment_code', 'track_code'),
-        'ncei' = c()
-    )
-)

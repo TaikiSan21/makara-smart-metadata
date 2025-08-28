@@ -199,33 +199,6 @@ parseDeviceId <- function(x) {
     x
 }
 
-formatDatetime <- function(date, time, warn=FALSE, type=c('char', 'posix')) {
-    date[is.na(date)] <- ''
-    time[is.na(time)] <- ''
-    datetime <- paste0(date, ' ', time)
-    bothMissing <- datetime == ' '
-    if(any(bothMissing) && isTRUE(warn)) {
-        warning(sum(bothMissing), ' dates did not have a date or time component')
-    }
-    datetime[bothMissing] <- NA
-    datetime <- parse_date_time(
-        datetime,
-        orders=c('%Y-%m-%d %H:%M:%S',
-                 '%Y/%m/%d %H:%M:%S',
-                 '%m/%d/%Y %H:%M:%S'),
-        truncated = 3,
-        tz='UTC')
-    noParse <- is.na(datetime) & !bothMissing
-    if(any(noParse) && isTRUE(warn)) {
-        warning(sum(noParse), ' dates could not be parsed')
-    }
-    type <- match.arg(type)
-    if(type == 'char') {
-        return(psxTo8601(datetime))
-    }
-    datetime
-}
-
 # turns columns new_proj and site_code into actual project_code as proj_test
 addNefscProjectCode <- function(x) {
     # x$new_proj_code <- NA
@@ -305,5 +278,15 @@ googsTimeToChar <- function(x, dropNaChar=FALSE) {
 deployCodeToOrg <- function(x) {
     x <- gsub('^([A-Z]*)_.*', '\\1', x)
     x[x == 'PARKSAUSTRALIA'] <- 'PARKSAU'
+    x
+}
+
+formatRecordingIntervals <- function(x) {
+    x <- x %>% 
+        mutate(compromised_starts=strsplit(compromised_starts, ';'),
+               compromised_ends=strsplit(compromised_ends, ';')) %>% 
+        unnest(cols=c('compromised_starts', 'compromised_ends')) %>% 
+        rename(recording_interval_start_datetime=compromised_starts,
+               recording_interval_end_datetime=compromised_ends)
     x
 }

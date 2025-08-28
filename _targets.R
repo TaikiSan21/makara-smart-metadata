@@ -18,8 +18,8 @@ tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
 # Can be set to "always" or "never"
-reload_data <- 'thorough'
-
+reload_database <- 'never'
+use_local_database <- TRUE
 list(
     # parameters ----
     # Values you can adjust to change how things run
@@ -60,6 +60,18 @@ list(
         read_yaml(secrets_file)
     }),
     tar_target(db, {
+        if(isTRUE(use_local_database)) {
+            db_folder <- 'local_db'
+            result <- list()
+            result$deployments <- readRDS(file.path(db_folder, 'deployments.rds'))
+            result$sites <- readRDS(file.path(db_folder, 'sites.rds'))
+            result$devices <- readRDS(file.path(db_folder, 'devices.rds'))
+            result$projects <- readRDS(file.path(db_folder, 'projects.rds'))
+            result$recordings <- readRDS(file.path(db_folder, 'recordings.rds'))
+            result$recording_intervals <- readRDS(file.path(db_folder, 'recording_intervals.rds'))
+            result$recordings_devices <- readRDS(file.path(db_folder, 'recordings_devices.rds'))
+            return(result)
+        }
         con <- try(DBI::dbConnect(
             RPostgres::Postgres(),
             host = secrets$makara_host,
@@ -69,8 +81,8 @@ list(
             password = secrets$makara_pw
         ), silent=TRUE)
         if(inherits(con, 'try-error')) {
-            warning('Could not connect to database to load new Makara data.')
-            tar_cancel(TRUE)
+            stop('Could not connect to database to load new Makara data.')
+            # tar_cancel(TRUE)
         }
         on.exit(DBI::dbDisconnect(con))
         sites <- DBI::dbGetQuery(con, 'select * from sites')
@@ -92,7 +104,7 @@ list(
             recording_intervals=rec_int,
             analyses=analyses
         )
-    }, cue=tar_cue(reload_data)),
+    }, cue=tar_cue(reload_database)),
     
     # google qaqc ----
     tar_target(qaqc_google_raw, {
@@ -107,7 +119,7 @@ list(
             one
         })
         result
-    }, cue=tar_cue(reload_data)),
+    }, cue=tar_cue('always')),
     tar_target(qaqc_google, {
         googsMap <- list(
             'usable_start_datetime_utc_beginning_of_no_boat_noise' = 'recording_usable_start_datetime', #
@@ -167,7 +179,7 @@ list(
     # smart sheets ----
     tar_target(data_upload_raw, {
         readPaDataSmart(secrets)
-    }, cue=tar_cue(reload_data)),
+    }, cue=tar_cue('always')),
     tar_target(data_upload, {
         # Only has instruemnt type or QAQC status we might care about
         dataUpMap <- list(
@@ -185,14 +197,14 @@ list(
     # not currently used for anything
     tar_target(instrument_tracking_raw, {
         readInsTrackSmart(secrets)
-    }, cue=tar_cue(reload_data)),
+    }, cue=tar_cue('always')),
     tar_target(instrument_tracking, {
         instrument_tracking_raw
     }),
     tar_target(st_deployment_raw, {
         result <- readStDeploymentSmart(secrets)
         result
-    }, cue=tar_cue(reload_data)),
+    }, cue=tar_cue('always')),
     tar_target(st_deployment, {
         dropIx <- which(st_deployment_raw$Status == 'Deployed' &
                             st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
@@ -287,10 +299,12 @@ list(
         deployment$deployment_longitude <- coalesce(deployment[['Longitude (DDM)']], deployment[['Longitude (DD)']])
         deployment$deployment_datetime <- formatDatetime(
             deployment$deploy_date,
-            deployment$deploy_time)
+            deployment$deploy_time,
+            warn=FALSE)
         deployment$recovery_datetime <- formatDatetime(
             deployment$recovery_date,
-            deployment$recovery_time)
+            deployment$recovery_time,
+            warn=FALSE)
         
         deployment <- select(deployment, all_of(depCols))
         recCols <- c(
@@ -485,17 +499,20 @@ list(
 # TODO 
 # FPOD get their specific dates - wai
 # checking for previously lost updates
+# Update dbValueChecker to see if x$devices x$projects whatever exists too
+# alreadyDbChecker should probably check more/all inputs. Can I make a helper
+# so that that isnt tedious...
 
 # are we going to have non-soundstrap data to run? Currently only place to get instrument
 # is from PA Data Upload sheet, but this will not have entries for deployments that
 # are lost. So, currently a problem where lost deployments do not get a recorder
-# type (soundtrap,haru)
+# type (soundtrap,haru) - yes but not now
 
 # MARI202402 PWN04 and SBNMS 202312 SB03 are UNUSABLE but causing warnings for missing
 # currently only affecting the fpod data for these deployments if removing
 # stuff already in DB
 
-# Will recording_channel ever not be 1?
+# Will recording_channel ever not be 1? - yes but not now
 
 # NOTES ON STATUS ----
 
