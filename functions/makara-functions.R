@@ -198,7 +198,9 @@ checkMakTemplate <- function(x, templates, mandatory=mandatory_fields, ncei=FALS
     onlyNotLost <- c('recording_start_datetime',
                      'recording_duration_secs',
                      'recording_interval_secs',
-                     'recording_sample_rate_khz')
+                     'recording_sample_rate_khz',
+                     'recording_n_channels',
+                     'recording_timezone')
     warns <- vector('list', length=0)
     for(n in names(x)) {
         thisTemp <- templates[[n]]
