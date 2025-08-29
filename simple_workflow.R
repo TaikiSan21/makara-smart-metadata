@@ -8,6 +8,7 @@ renv::restore()
 
 # Should only have to run this once - we need Google credentials for download
 googledrive::drive_auth()
+bigrquery::bq_auth()
 
 # Make sure you have secrets.yml in your .secrets folder
 # This runs the workflow!

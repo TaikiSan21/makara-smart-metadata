@@ -443,13 +443,62 @@ checkDbValues <- function(x, db) {
 
 # Checks if deployments, recordings, and recording_intervals
 # are already in makara 
+# checkAlreadyDb <- function(x, db) {
+#     # deployment and recording checko
+#     dep_rec <- left_join(
+#         rename(db$deployments, deployment_id=id),
+#         select(db$recordings, recording_code, deployment_id),
+#         by='deployment_id'
+#     ) %>% 
+#         mutate(JOINCHECK=TRUE)
+#     depCheck <- left_join(
+#         x$deployments,
+#         distinct(select(dep_rec, organization_code, deployment_code, JOINCHECK)),
+#         by=c('organization_code', 'deployment_code')
+#     )
+#     newDep <- is.na(depCheck$JOINCHECK)
+#     x$deployments$new <- newDep
+#     recCheck <- left_join(
+#         x$recordings,
+#         dep_rec,
+#         by=c('organization_code', 'deployment_code', 'recording_code')
+#     )
+#     newRec <- is.na(recCheck$JOINCHECK)
+#     x$recordings$new <- newRec
+#     newDep <- sum(x$deployments$new)
+#     newRec <- sum(x$recordings$new)
+#     message(newDep, ' out of ', nrow(x$deployments), ' deployments are new (not yet in Makara)')
+#     message(newRec , ' out of ', nrow(x$recordings), ' recordings are new (not yet in Makara)')
+#     if('recording_intervals' %in% names(x)) {
+#         intData <- left_join(
+#             db$recording_intervals, 
+#             select(db$recordings, deployment_id, id, recording_code), 
+#             by=c('recording_id'='id')) %>% 
+#             left_join(
+#                 select(db$deployments, deployment_id=id, deployment_code),
+#                 by='deployment_id'
+#             ) %>% 
+#             select(deployment_code, recording_code, 
+#                    recording_interval_start_datetime) %>% 
+#             mutate(JOINCHECK=TRUE,
+#                    recording_interval_start_datetime=format(recording_interval_start_datetime, 
+#                                                             format='%Y-%m-%d %H:%M:%S'))
+#         intCheck <- left_join(
+#             x$recording_intervals,
+#             intData,
+#             by=c('deployment_code', 'recording_code', 'recording_interval_start_datetime'))
+#         newInt <- is.na(intCheck$JOINCHECK)
+#         x$recording_intervals$new <- newInt
+#         newInt <- sum(x$recording_intervals$new)
+#         message(newInt, ' out of ', nrow(x$recording_intervals), 
+#                 ' recording_intervals are new (not yet in Makara)')
+#     }
+#     x
+# }
+# reworked for BQ database
 checkAlreadyDb <- function(x, db) {
     # deployment and recording checko
-    dep_rec <- left_join(
-        rename(db$deployments, deployment_id=id),
-        select(db$recordings, recording_code, deployment_id),
-        by='deployment_id'
-    ) %>% 
+    dep_rec <- db$recordings %>% 
         mutate(JOINCHECK=TRUE)
     depCheck <- left_join(
         x$deployments,
@@ -470,14 +519,7 @@ checkAlreadyDb <- function(x, db) {
     message(newDep, ' out of ', nrow(x$deployments), ' deployments are new (not yet in Makara)')
     message(newRec , ' out of ', nrow(x$recordings), ' recordings are new (not yet in Makara)')
     if('recording_intervals' %in% names(x)) {
-        intData <- left_join(
-            db$recording_intervals, 
-            select(db$recordings, deployment_id, id, recording_code), 
-            by=c('recording_id'='id')) %>% 
-            left_join(
-                select(db$deployments, deployment_id=id, deployment_code),
-                by='deployment_id'
-            ) %>% 
+        intData <- db$recording_intervals %>% 
             select(deployment_code, recording_code, 
                    recording_interval_start_datetime) %>% 
             mutate(JOINCHECK=TRUE,
@@ -495,6 +537,7 @@ checkAlreadyDb <- function(x, db) {
     }
     x
 }
+
 # Only works after `checkAlreadyDb` run to create "new" column
 dropAlreadyDb <- function(x, drop=FALSE) {
     for(n in names(x)) {

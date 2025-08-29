@@ -10,7 +10,8 @@ library(targets)
 # Set target options:
 tar_option_set(
     packages = c("dplyr", 'rjson', 'lubridate', 'httr', 
-                 'googledrive', 'readxl', 'tidyr', 'yaml', 'DBI', 'RPostgres')
+                 'httpuv', 'bigrquery',
+                 'googledrive', 'readxl', 'tidyr', 'yaml')
 )
 
 # Run the R scripts in the R/ folder with your custom functions:
@@ -19,7 +20,13 @@ tar_source('functions/nefsc-metadata-functions.R')
 
 # Can be set to "always" or "never"
 reload_database <- 'never'
-use_local_database <- TRUE
+use_local_database <- FALSE
+
+# don't change this
+if(!tar_exist_objects('db')) {
+    reload_database <- 'always'
+}
+
 list(
     # parameters ----
     # Values you can adjust to change how things run
@@ -60,51 +67,90 @@ list(
         read_yaml(secrets_file)
     }),
     tar_target(db, {
-        if(isTRUE(use_local_database)) {
-            db_folder <- 'local_db'
-            result <- list()
-            result$deployments <- readRDS(file.path(db_folder, 'deployments.rds'))
-            result$sites <- readRDS(file.path(db_folder, 'sites.rds'))
-            result$devices <- readRDS(file.path(db_folder, 'devices.rds'))
-            result$projects <- readRDS(file.path(db_folder, 'projects.rds'))
-            result$recordings <- readRDS(file.path(db_folder, 'recordings.rds'))
-            result$recording_intervals <- readRDS(file.path(db_folder, 'recording_intervals.rds'))
-            result$recordings_devices <- readRDS(file.path(db_folder, 'recordings_devices.rds'))
-            return(result)
-        }
-        con <- try(DBI::dbConnect(
-            RPostgres::Postgres(),
-            host = secrets$makara_host,
-            port = secrets$makara_port,
-            dbname =secrets$makara_dbname,
-            user = secrets$makara_user,
-            password = secrets$makara_pw
-        ), silent=TRUE)
-        if(inherits(con, 'try-error')) {
-            stop('Could not connect to database to load new Makara data.')
-            # tar_cancel(TRUE)
-        }
-        on.exit(DBI::dbDisconnect(con))
-        sites <- DBI::dbGetQuery(con, 'select * from sites')
-        deployments <- DBI::dbGetQuery(con, 'select * from deployments')
-        recordings <- DBI::dbGetQuery(con, 'select * from recordings')
-        projects <- DBI::dbGetQuery(con, 'select * from projects')
-        devices <- DBI::dbGetQuery(con, 'select * from devices')
-        rec_dev <- DBI::dbGetQuery(con, 'select * from recordings_devices')
-        rec_int <- DBI::dbGetQuery(con, 'select * from recording_intervals')
-        analyses <- DBI::dbGetQuery(con, 'select * from analyses')
+        ds <- bq_dataset(secrets$bq_project, 
+                         secrets$bq_dataset)
+        tb_ref <- bq_dataset_query(ds, query = "select * from view_reference_codes")
+        df_ref <- bq_table_download(tb_ref)
         
-        list(
-            sites=sites,
-            deployments=deployments,
-            recordings=recordings,
-            projects=projects,
-            devices=devices,
-            recordings_devices=rec_dev,
-            recording_intervals=rec_int,
-            analyses=analyses
-        )
+        tb_org <- bq_dataset_query(ds, query = "select * from view_organization_codes")
+        df_org <- bq_table_download(tb_org)
+        
+        recint_q <- bq_dataset_query(ds, query = "select 
+                             ri.recording_interval_start_datetime,
+                             ri.recording_interval_end_datetime,
+                             r.recording_code,
+                             d.deployment_code
+                             from recording_intervals ri 
+                             left join 
+                             recordings r 
+                             on ri.recording_id = r.id
+                             left join
+                             deployments d
+                             on  r.deployment_id = d.id")
+        
+        recint_df <- bq_table_download(recint_q)
+        
+        result <- split(df_org, df_org$table)
+        result <- lapply(result, function(x) {
+            code_prefix <- switch(
+                x$table[1],
+                'analyses' = 'analysis_code',
+                paste0(gsub('s$', '', x$table[1]), '_code')
+            )
+            names(x)[3] <- code_prefix
+            keepCol <- which(sapply(x, function(col) !all(is.na(col))))
+            x[keepCol]
+        })
+        result$recording_intervals <- recint_df
+        result$reference_codes <- tb_ref
+        result
     }, cue=tar_cue(reload_database)),
+    # tar_target(db, {
+    #     if(isTRUE(use_local_database)) {
+    #         db_folder <- 'local_db'
+    #         result <- list()
+    #         result$deployments <- readRDS(file.path(db_folder, 'deployments.rds'))
+    #         result$sites <- readRDS(file.path(db_folder, 'sites.rds'))
+    #         result$devices <- readRDS(file.path(db_folder, 'devices.rds'))
+    #         result$projects <- readRDS(file.path(db_folder, 'projects.rds'))
+    #         result$recordings <- readRDS(file.path(db_folder, 'recordings.rds'))
+    #         result$recording_intervals <- readRDS(file.path(db_folder, 'recording_intervals.rds'))
+    #         result$recordings_devices <- readRDS(file.path(db_folder, 'recordings_devices.rds'))
+    #         return(result)
+    #     }
+    #     con <- try(DBI::dbConnect(
+    #         RPostgres::Postgres(),
+    #         host = secrets$makara_host,
+    #         port = secrets$makara_port,
+    #         dbname =secrets$makara_dbname,
+    #         user = secrets$makara_user,
+    #         password = secrets$makara_pw
+    #     ), silent=TRUE)
+    #     if(inherits(con, 'try-error')) {
+    #         stop('Could not connect to database to load new Makara data.')
+    #         # tar_cancel(TRUE)
+    #     }
+    #     on.exit(DBI::dbDisconnect(con))
+    #     sites <- DBI::dbGetQuery(con, 'select * from sites')
+    #     deployments <- DBI::dbGetQuery(con, 'select * from deployments')
+    #     recordings <- DBI::dbGetQuery(con, 'select * from recordings')
+    #     projects <- DBI::dbGetQuery(con, 'select * from projects')
+    #     devices <- DBI::dbGetQuery(con, 'select * from devices')
+    #     rec_dev <- DBI::dbGetQuery(con, 'select * from recordings_devices')
+    #     rec_int <- DBI::dbGetQuery(con, 'select * from recording_intervals')
+    #     analyses <- DBI::dbGetQuery(con, 'select * from analyses')
+    #     
+    #     list(
+    #         sites=sites,
+    #         deployments=deployments,
+    #         recordings=recordings,
+    #         projects=projects,
+    #         devices=devices,
+    #         recordings_devices=rec_dev,
+    #         recording_intervals=rec_int,
+    #         analyses=analyses
+    #     )
+    # }, cue=tar_cue(reload_database)),
     
     # google qaqc ----
     tar_target(qaqc_google_raw, {
@@ -498,6 +544,8 @@ list(
 
 # TODO 
 # FPOD get their specific dates - wai
+# Probably need better logic for only updating DB when you force it to
+# Logic to do it only once intially, and then after that only if 'always'
 # checking for previously lost updates
 # Update dbValueChecker to see if x$devices x$projects whatever exists too
 # alreadyDbChecker should probably check more/all inputs. Can I make a helper
