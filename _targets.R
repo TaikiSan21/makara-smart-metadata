@@ -102,7 +102,7 @@ list(
             x[keepCol]
         })
         result$recording_intervals <- recint_df
-        result$reference_codes <- tb_ref
+        result$reference_codes <- df_ref
         result
     }, cue=tar_cue(reload_database)),
     # tar_target(db, {
