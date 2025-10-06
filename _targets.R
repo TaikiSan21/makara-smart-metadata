@@ -23,7 +23,7 @@ reload_database <- 'never'
 use_local_database <- FALSE
 
 # don't change this
-if(!tar_exist_objects('db')) {
+if(!tar_exist_objects('db_raw')) {
     reload_database <- 'always'
 }
 
@@ -35,9 +35,11 @@ list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
             'pacm_status_to_export' = c('READY'),
             # Whether or not to export data already present in DB TRUE/FALSE
-            'export_already_in_db' = FALSE,
+            'export_already_in_db' = F,
             # identify specific deployments to skip, if wanted
-            'skip_deployments' = c() #c('PARKSAUSTRALIA_CEMP_202404_CES')
+            'skip_deployments' = c('NEFSC_TEMP-EXP_202503_AVAST_ST7393',
+                                   'NEFSC_TEMP-EXP_202503_AVAST_ST8024',
+                                   'NEFSC_TEMP-EXP_202503_AVAST_ST8546') #c('PARKSAUSTRALIA_CEMP_202404_CES')
         )
     }),
     # constants ----
@@ -66,7 +68,7 @@ list(
     tar_target(secrets, {
         read_yaml(secrets_file)
     }),
-    tar_target(db, {
+    tar_target(db_raw, {
         ds <- bq_dataset(secrets$bq_project, 
                          secrets$bq_dataset)
         tb_ref <- bq_dataset_query(ds, query = "select * from view_reference_codes")
@@ -90,7 +92,12 @@ list(
         
         recint_df <- bq_table_download(recint_q)
         
-        result <- split(df_org, df_org$table)
+        list(db_ref=df_ref,
+             db_org=df_org,
+             db_rec_int=recint_df)
+    }, cue=tar_cue(reload_database)),
+    tar_target(db, {
+        result <- split(db_raw$db_org, db_raw$db_org$table)
         result <- lapply(result, function(x) {
             code_prefix <- switch(
                 x$table[1],
@@ -101,10 +108,10 @@ list(
             keepCol <- which(sapply(x, function(col) !all(is.na(col))))
             x[keepCol]
         })
-        result$recording_intervals <- recint_df
-        result$reference_codes <- df_ref
+        result$recording_intervals <- db_raw$db_rec_int
+        result$reference_codes <- db_raw$db_ref
         result
-    }, cue=tar_cue(reload_database)),
+    }),
     # tar_target(db, {
     #     if(isTRUE(use_local_database)) {
     #         db_folder <- 'local_db'
@@ -382,6 +389,68 @@ list(
         result <- list(deployments=deployment, fpod=fpod)
         result
     }),
+    # Temperature meta checks ----
+    tar_target(temp_devices, {
+        dropIx <- which(st_deployment_raw$Status == 'Deployed' &
+                            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
+        dropIx <- c(dropIx, which(is.na(st_deployment_raw$Status)))
+        st_deployment_map <- list(
+            'Name' = 'deployment_code', #
+            # 'Site ID' = 'site_code', #
+            # 'ST600 Serial Number:' = 'device_code', #
+            'ST600 Serial Number:' = 'recording_device',
+            'FPOD Serial Number' = 'fpod_device',
+            'Acoustic Release Model' = 'release_model',
+            'Acoustic Release Serial Number' = 'release_number',
+            'Temp. Logger Model' = 'temp_model',
+            'Temp. Logger ID #:' = 'temp_number',
+            'Sat. Tracker Model?' = 'satellite_model',
+            'Sat. Tracker Serial Number' = 'satellite_number'
+        )
+
+        deployment <- myRenamer(st_deployment_raw[-dropIx, ],
+                                map=st_deployment_map)
+        # case if model name not given but ID is, assume tidbit
+        tempIdOnly <- is.na(deployment$temp_model) & !is.na(deployment$temp_number)
+        deployment$temp_model[tempIdOnly] <- 'TIDBIT'
+        # case if model name not given but ID is, assum vemco
+        releaseIdOnly <- is.na(deployment$release_model) & !is.na(deployment$release_number)
+        deployment$release_model[releaseIdOnly] <- 'VEMCO'
+        deployment <- mutate(
+            deployment,
+            temp_model = toupper(temp_model),
+            release_model = toupper(release_model),
+            satellite_model = toupper(satellite_model),
+            release_model = gsub('VR2AR', 'VEMCO', release_model),
+            satellite_model = gsub('APOLLO X1', 'SATELLITE_TRACKER', satellite_model),
+            release_number = gsub('\\*\\*', '', release_number))
+        deployment <- unite(deployment, 'temp_code', c('temp_model', 'temp_number'),
+                            sep='-', na.rm=TRUE)
+        deployment$temp_code[deployment$temp_code == ''] <- NA
+        deployment <- unite(deployment, 'release_code', c('release_model', 'release_number'),
+                            sep='-', na.rm=TRUE)
+        deployment$release_code[deployment$release_code == ''] <- NA
+        deployment <- unite(deployment, 'satellite_code', c('satellite_model', 'satellite_number'),
+                            sep='-', na.rm=TRUE)
+        deployment$satellite_code[deployment$satellite_code == ''] <- NA
+
+        deployment$recording_device <- paste0('SOUNDTRAP-', deployment$recording_device)
+
+
+        deployment$fpod_device <- gsub('N/?A', '', deployment$fpod_device)
+        deployment$fpod_device[deployment$fpod_device == ''] <- NA
+        deployment$fpod_device[!is.na(deployment$fpod_device)] <- paste0('FPOD-', deployment$fpod_device[!is.na(deployment$fpod_device)])
+        deployment <- unite(deployment, deployment_device_codes,
+                        c('recording_device', 'temp_code', 'release_code', 'satellite_code', 'fpod_device'),
+                        na.rm=TRUE, sep=',')
+        deployment <- deployment[c('deployment_code', 'deployment_device_codes')]
+        # some deploy are here twice bc two STs, combine and distinct
+        deployment %>% 
+            mutate(deployment_device_codes = strsplit(deployment_device_codes, ',')) %>% 
+            unnest(deployment_device_codes) %>% 
+            distinct() %>% 
+            summarise(deployment_device_codes=paste0(deployment_device_codes, collapse=','), .by=deployment_code)
+    }),
     # FPOD ----
     tar_target(fpod_times, {
         fpodFile <- 'FPOD_Dates.csv'
@@ -393,8 +462,9 @@ list(
                                         time=data$end_time,
                                         warn=FALSE)
         data <- rename(data, deployment_code=deployment)
+        data$deployment_code <- gsub(' ', '', data$deployment_code)
         data
-    }),
+    }, cue=tar_cue('always')),
     # combine sources ----
     tar_target(combined_data, {
         # removing one NA deployment
@@ -429,11 +499,11 @@ list(
                 for(d in multiRecorderDep) {
                     depIds <- dep$device_code[dep$deployment_code == d]
                     thisG <- which(x$deployment_code == d)
+                    x$recording_code[thisG] <- paste0(x$recording_code[thisG], '_', seq_along(thisG))
                     if(all(!is.na(x$st_serial_number[thisG]))) {
                         x$device_code[thisG] <- x$st_serial_number[thisG]
                         next
                     }
-                    x$recording_code[thisG] <- paste0(x$recording_code[thisG], '_', seq_along(thisG))
                     for(i in thisG) {
                         for(dev in depIds) {
                             if(grepl(dev, x$recording_comments[i])) {
@@ -474,6 +544,22 @@ list(
             filter(pacm_db_status %in% params$pacm_status_to_export)
         dep_out <- select(result, any_of(c(names(templates$deployments), 'pacm_db_status', 'deployment_status')))
         rec_out <- select(result, any_of(names(templates$recordings)))
+        multiRecorderDep <- names(which(table(rec_out$deployment_code) > 1))
+        # deployments with multiple recorders get 
+        multiDrop <- numeric(0)
+        for(d in multiRecorderDep) {
+            thisIx <- which(dep_out$deployment_code == d)
+            if(length(thisIx) == 1) {
+                next
+            }
+            sumNa <- apply(sapply(dep_out[thisIx, ], is.na), 1, sum)
+            # either take the row with least NA vals, or if tied the first
+            inNa <- thisIx[which(sumNa == min(sumNa))[1]]
+            multiDrop <- c(multiDrop, thisIx[thisIx != inNa])
+        }
+        if(length(multiDrop) > 0) {
+            dep_out <- dep_out[-multiDrop, ]
+        }
         fpodCommonCols <- c('organization_code', 
                             'deployment_code', 
                             # 'recording_start_datetime', 
@@ -506,6 +592,7 @@ list(
         fpod_out$recording_filetypes <- NA
         fpod_out$recording_channel <- constants$fpod_channel
         fpod_out$fpod_device <- NULL
+        fpod_out <- distinct(fpod_out)
         rec_out <- bind_rows(rec_out, fpod_out)
         rec_int_out <- select(result, 
                               any_of(c(names(templates$recording_intervals), 
@@ -543,9 +630,6 @@ list(
 ## frange is 20kHz - 220kHz
 
 # TODO 
-# FPOD get their specific dates - wai
-# Probably need better logic for only updating DB when you force it to
-# Logic to do it only once intially, and then after that only if 'always'
 # checking for previously lost updates
 # Update dbValueChecker to see if x$devices x$projects whatever exists too
 # alreadyDbChecker should probably check more/all inputs. Can I make a helper
@@ -568,3 +652,8 @@ list(
 # PARKSAUSTRALIA_CEMP_202404_CES is not in Smart
 
 # All AVASTs are in ??? status
+
+# MAYBE A PROBLEM - Double check how metadata is working out for deployments that
+# have two Soundtraps - these get double entries in the smort shorts so double
+# check that outputs are not duplicated. In the temperature devices testing you
+# end up with satellite and such device codes with no number - incorrect

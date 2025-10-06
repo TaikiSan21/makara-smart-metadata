@@ -233,6 +233,30 @@ checkMakTemplate <- function(x, templates, mandatory=mandatory_fields, ncei=FALS
                                                ' are present'))
             thisData <- thisData[!wrongNames]
         }
+        # check that codes are unique if they should be
+        uniqueCols <- switch(n,
+               'deployments' = c('organization_code', 'deployment_code'),
+               'recordings' = c('organization_code', 'deployment_code', 'recording_code'),
+               NULL
+        )
+        if(!is.null(uniqueCols)) {
+        # if(n == 'deployments') {
+            # uniqueCols <- c('organization_code', 'deployment_code')
+            checkDupeDeps <- thisData %>% 
+                summarise(dupe = n() > 1, .by=all_of(uniqueCols))
+            dupeDeps <- checkDupeDeps$dupe
+            codePrint <- paste0('"', paste0(uniqueCols, collapse='-'), '"')
+            if(any(dupeDeps)) {
+                warns <- addWarning(warns, 
+                                    deployment=checkDupeDeps$deployment_code[dupeDeps],
+                                    table=n,
+                                    type=paste0('Duplicated ', codePrint),
+                                    message=paste0(codePrint, 
+                                                   checkDupeDeps$deployment_code[dupeDeps],
+                                                   ' has multiple entries in ', n)
+                )
+            }
+        }
         # check that mandatory columns atually exist
         missMand <- !thisMand  %in% names(thisData)
         if(any(missMand)) {
