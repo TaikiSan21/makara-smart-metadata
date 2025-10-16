@@ -11,7 +11,8 @@ library(targets)
 tar_option_set(
     packages = c("dplyr", 'rjson', 'lubridate', 'httr', 
                  'httpuv', 'bigrquery',
-                 'googledrive', 'readxl', 'tidyr', 'yaml')
+                 'googledrive', 'readxl', 'tidyr', 'yaml',
+                 'makaraValidatr')
 )
 
 # Run the R scripts in the R/ folder with your custom functions:
@@ -58,9 +59,10 @@ list(
         )
     }),
     # templates ----
-    tar_target(template_dir, 'templates'),
+    # tar_target(template_dir, 'templates'),
     tar_target(templates, {
-        formatBasicTemplates(template_dir)
+        # now uses makaraValidatr
+        formatBasicTemplates()
     }),
     # db tables ----
     # secrets has DB passwords, smartsheets key and IDs
@@ -96,6 +98,7 @@ list(
              db_org=df_org,
              db_rec_int=recint_df)
     }, cue=tar_cue(reload_database)),
+    # transform into list of db$table_name
     tar_target(db, {
         result <- split(db_raw$db_org, db_raw$db_org$table)
         result <- lapply(result, function(x) {
@@ -424,12 +427,15 @@ list(
             release_model = gsub('VR2AR', 'VEMCO', release_model),
             satellite_model = gsub('APOLLO X1', 'SATELLITE_TRACKER', satellite_model),
             release_number = gsub('\\*\\*', '', release_number))
+        deployment$temp_model[is.na(deployment$temp_number)] <- NA
         deployment <- unite(deployment, 'temp_code', c('temp_model', 'temp_number'),
                             sep='-', na.rm=TRUE)
         deployment$temp_code[deployment$temp_code == ''] <- NA
+        deployment$release_model[is.na(deployment$release_number)] <- NA
         deployment <- unite(deployment, 'release_code', c('release_model', 'release_number'),
                             sep='-', na.rm=TRUE)
         deployment$release_code[deployment$release_code == ''] <- NA
+        deployment$satellite_model[is.na(deployment$satellite_number)] <- NA
         deployment <- unite(deployment, 'satellite_code', c('satellite_model', 'satellite_number'),
                             sep='-', na.rm=TRUE)
         deployment$satellite_code[deployment$satellite_code == ''] <- NA
@@ -445,11 +451,29 @@ list(
                         na.rm=TRUE, sep=',')
         deployment <- deployment[c('deployment_code', 'deployment_device_codes')]
         # some deploy are here twice bc two STs, combine and distinct
+        # multiRecorderDep <- names(which(table(deployment$deployment_code) > 1))
+        # # deployments with multiple recorders get 
+        # multiDrop <- numeric(0)
+        # for(d in multiRecorderDep) {
+        #     thisIx <- which(deployment$deployment_code == d)
+        #     if(length(thisIx) == 1) {
+        #         next
+        #     }
+        #     sumNa <- apply(sapply(deployment[thisIx, ], is.na), 1, sum)
+        #     # either take the row with least NA vals, or if tied the first
+        #     inNa <- thisIx[which(sumNa == min(sumNa))[1]]
+        #     multiDrop <- c(multiDrop, thisIx[thisIx != inNa])
+        # }
+        # if(length(multiDrop) > 0) {
+        #     deployment <- deployment[-multiDrop, ]
+        # }
         deployment %>% 
-            mutate(deployment_device_codes = strsplit(deployment_device_codes, ',')) %>% 
-            unnest(deployment_device_codes) %>% 
-            distinct() %>% 
-            summarise(deployment_device_codes=paste0(deployment_device_codes, collapse=','), .by=deployment_code)
+            mutate(device_code = strsplit(deployment_device_codes, ',')) %>% 
+            unnest(device_code) %>% 
+            distinct() %>%
+            select(deployment_code, device_code)
+            # summarise(deployment_device_codes=paste0(deployment_device_codes, collapse=','),
+            #           .by=deployment_code)
     }),
     # FPOD ----
     tar_target(fpod_times, {
@@ -612,15 +636,21 @@ list(
         out <- dropAlreadyDb(out, drop=!params$export_already_in_db)
         out <- checkMakTemplate(out,
                                 templates=templates,
-                                mandatory=mandatory_fields,
+                                # mandatory=mandatory_fields,
                                 ncei=FALSE,
                                 dropEmpty = TRUE)
         out <- checkDbValues(out, db)
         checkWarnings(out)
         out
     }),
-    tar_target(output_files, {
+    tar_target(output, {
         writeTemplateOutput(db_check, folder='outputs')
+        'outputs'
+    }, format='file'),
+    tar_target(validatr, {
+        validate_submission(output, 
+                            output_file = 'outputs/validation_results.csv',
+                            verbose=FALSE)
     })
 )
 

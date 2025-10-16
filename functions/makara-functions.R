@@ -1,70 +1,70 @@
 # Generic Makara Functions ----
-# Packages: dplyr, tidyr, lubridate
+# Packages: dplyr, tidyr, lubridate, makaraValidatr
 
 ## Constant values ----
 # List of mandatory fields for various tables
-mandatory_fields <- list(
-    'deployments' = list(
-        'always' = c('organization_code', 'deployment_code', 'deployment_platform_type_code', 
-                     'deployment_datetime', 'deployment_latitude', 'deployment_longitude'),
-        'ncei' = c('project_code','site_code', 'recovery_datetime', 'recovery_longitude', #site if stationary
-                   'recovery_latitude') 
-    ),
-    'detections' =  list(
-        'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code',
-                     'analysis_organization_code',
-                     'detection_start_datetime', 'detection_end_datetime' ,
-                     'detection_effort_secs', 'detection_sound_source_code',
-                     'detection_call_type_code', 'detection_result_code'),
-        'ncei' = c()
-    ),
-    'analyses' = list(
-        'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code', 'recording_codes',
-                     'analysis_organization_code',
-                     'analysis_sound_source_codes', 'analysis_granularity_code', 
-                     'analysis_sample_rate_khz', 'analysis_processing_code', 
-                     'analysis_quality_code', 'analysis_protocol_reference',
-                     'analysis_release_data', 'analysis_release_pacm', 'detector_codes'),
-        'ncei' = c('analysis_start_datetime', 'analysis_end_datetime', 'analysis_min_frequency_khz',
-                   'analysis_max_frequency_khz')
-    ),
-    'recordings' = list(
-        'always' = c('organization_code', 'deployment_code', 'recording_code', 
-                     'recording_device_codes', 'recording_start_datetime', 'recording_interval_secs',
-                     'recording_sample_rate_khz', 'recording_duration_secs',
-                     'recording_n_channels', 'recording_timezone'), # many are only if not lsot
-        'ncei' = c('recording_end_datetime', 'recording_bit_depth', 'recording_channel',
-                   'recording_quality_code', 'recording_device_depth_m', 'recording_json')
-    ),
-    'recording_intervals' = list(
-        'always' = c('organization_code', 'deployment_code', 'recording_code',
-                     'recording_interval_quality_code'),
-        'ncei' = c()
-    ),
-    'devices' = list(
-        'always' = c('organization_code', 'device_code', 'device_type_code'),
-        'ncei' = c()
-    ),
-    'projects' = list(
-        'always' = c('organization_code', 'project_code', 'project_contacts'),
-        'ncei' = c()
-    ),
-    'sites' = list(
-        'always' = c('organization_code', 'site_code'),
-        'ncei' = c()
-    ),
-    'track_positions' = list(
-        'always' = c('organization_code', 'deployment_code', 'track_code',
-                     'track_position_datetime',
-                     'track_position_latitude',
-                     'track_position_longitude'),
-        'ncei' = c()
-    ),
-    'tracks' = list(
-        'always' = c('organization_code', 'deployment_code', 'track_code'),
-        'ncei' = c()
-    )
-)
+# mandatory_fields <- list(
+#     'deployments' = list(
+#         'always' = c('organization_code', 'deployment_code', 'deployment_platform_type_code', 
+#                      'deployment_datetime', 'deployment_latitude', 'deployment_longitude'),
+#         'ncei' = c('project_code','site_code', 'recovery_datetime', 'recovery_longitude', #site if stationary
+#                    'recovery_latitude') 
+#     ),
+#     'detections' =  list(
+#         'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code',
+#                      'analysis_organization_code',
+#                      'detection_start_datetime', 'detection_end_datetime' ,
+#                      'detection_effort_secs', 'detection_sound_source_code',
+#                      'detection_call_type_code', 'detection_result_code'),
+#         'ncei' = c()
+#     ),
+#     'analyses' = list(
+#         'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code', 'recording_codes',
+#                      'analysis_organization_code',
+#                      'analysis_sound_source_codes', 'analysis_granularity_code', 
+#                      'analysis_sample_rate_khz', 'analysis_processing_code', 
+#                      'analysis_quality_code', 'analysis_protocol_reference',
+#                      'analysis_release_data', 'analysis_release_pacm', 'detector_codes'),
+#         'ncei' = c('analysis_start_datetime', 'analysis_end_datetime', 'analysis_min_frequency_khz',
+#                    'analysis_max_frequency_khz')
+#     ),
+#     'recordings' = list(
+#         'always' = c('organization_code', 'deployment_code', 'recording_code', 
+#                      'recording_device_codes', 'recording_start_datetime', 'recording_interval_secs',
+#                      'recording_sample_rate_khz', 'recording_duration_secs',
+#                      'recording_n_channels', 'recording_timezone'), # many are only if not lsot
+#         'ncei' = c('recording_end_datetime', 'recording_bit_depth', 'recording_channel',
+#                    'recording_quality_code', 'recording_device_depth_m', 'recording_json')
+#     ),
+#     'recording_intervals' = list(
+#         'always' = c('organization_code', 'deployment_code', 'recording_code',
+#                      'recording_interval_quality_code'),
+#         'ncei' = c()
+#     ),
+#     'devices' = list(
+#         'always' = c('organization_code', 'device_code', 'device_type_code'),
+#         'ncei' = c()
+#     ),
+#     'projects' = list(
+#         'always' = c('organization_code', 'project_code', 'project_contacts'),
+#         'ncei' = c()
+#     ),
+#     'sites' = list(
+#         'always' = c('organization_code', 'site_code'),
+#         'ncei' = c()
+#     ),
+#     'track_positions' = list(
+#         'always' = c('organization_code', 'deployment_code', 'track_code',
+#                      'track_position_datetime',
+#                      'track_position_latitude',
+#                      'track_position_longitude'),
+#         'ncei' = c()
+#     ),
+#     'tracks' = list(
+#         'always' = c('organization_code', 'deployment_code', 'track_code'),
+#         'ncei' = c()
+#     )
+# )
 
 ## Functions ----
 # map is list of form old=new
@@ -193,7 +193,7 @@ addWarning <- function(x, deployment, table, type, message) {
 # mandatory is constant list 
 # ncei flag is whether to check columns that are only mandatory for NCEI
 # dropEmpty is flag whether to drop empty non-mandatory columns from output
-checkMakTemplate <- function(x, templates, mandatory=mandatory_fields, ncei=FALSE, dropEmpty=FALSE) {
+checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE) {
     result <- templates[names(x)]
     onlyNotLost <- c('recording_start_datetime',
                      'recording_duration_secs',
@@ -201,7 +201,23 @@ checkMakTemplate <- function(x, templates, mandatory=mandatory_fields, ncei=FALS
                      'recording_sample_rate_khz',
                      'recording_n_channels',
                      'recording_timezone')
+    col_defs <- makaraValidatr::column_definitions
+    mandatory <- lapply(col_defs, function(x) {
+        list(
+            'always' = x$name[x$required],
+            'ncei' = x$name[x$required_ncei]
+        )
+    })
     warns <- vector('list', length=0)
+    uniqueConditions <- lapply(col_defs, function(d) {
+        vals <- d$unique_by[!is.na(d$unique_by)]
+        if(length(vals) == 0) {
+            return(NULL)
+        }
+        vals <- strsplit(vals, ',')[[1]]
+        vals <- c(d$name[!is.na(d$unique_by)], vals)
+        vals
+    })
     for(n in names(x)) {
         thisTemp <- templates[[n]]
         thisMand <- mandatory[[n]]$always
@@ -234,14 +250,9 @@ checkMakTemplate <- function(x, templates, mandatory=mandatory_fields, ncei=FALS
             thisData <- thisData[!wrongNames]
         }
         # check that codes are unique if they should be
-        uniqueCols <- switch(n,
-               'deployments' = c('organization_code', 'deployment_code'),
-               'recordings' = c('organization_code', 'deployment_code', 'recording_code'),
-               NULL
-        )
+        
+        uniqueCols <- uniqueConditions[[n]]
         if(!is.null(uniqueCols)) {
-        # if(n == 'deployments') {
-            # uniqueCols <- c('organization_code', 'deployment_code')
             checkDupeDeps <- thisData %>% 
                 summarise(dupe = n() > 1, .by=all_of(uniqueCols))
             dupeDeps <- checkDupeDeps$dupe
@@ -297,6 +308,18 @@ checkMakTemplate <- function(x, templates, mandatory=mandatory_fields, ncei=FALS
                 notUnusable <- thisData$recording_quality_code != 'UNUSABLE' | is.na(thisData$recording_quality_code)
                 naVals <- naVals & notLost & notUnusable
             }
+            if(n == 'detections' &&
+               m == 'localization_method_code') {
+                isLocalized <- !is.na(thisData$localization_latitude)
+                naVals <- naVals & isLocalized
+            }
+            
+            if(n == 'detections' &&
+               m == 'localization_depth_method_code') {
+                isLocalizedDepth <- !is.na(thisData$localization_depth_m)
+                naVals <- naVals & isLocalizedDepth
+            }
+            
             if(any(naVals)) {
                 warns <- addWarning(warns, deployment=unique(thisData$deployment_code[naVals]),
                                     type='NA in Mandatory Field',
@@ -599,85 +622,102 @@ writeTemplateOutput <- function(data, folder='outputs') {
 
 # folder containing template .csv files
 # applies column types for enforcing later
-formatBasicTemplates <- function(folder) {
-    tempFiles <- list.files(folder, pattern='csv$', full.names=TRUE, recursive=TRUE)
-    result <- lapply(tempFiles, function(x) {
-        # sometimes incomplete final line warning, ignore it
-        table <- suppressWarnings(read.csv(x, stringsAsFactors=FALSE))
-        table <- lapply(table, as.character)
-        table
+formatBasicTemplates <- function() {
+    # tempFiles <- list.files(folder, pattern='csv$', full.names=TRUE, recursive=TRUE)
+    # result <- lapply(tempFiles, function(x) {
+    #     # sometimes incomplete final line warning, ignore it
+    #     table <- suppressWarnings(read.csv(x, stringsAsFactors=FALSE))
+    #     table <- lapply(table, as.character)
+    #     table
+    # })
+    col_defs <- makaraValidatr::column_definitions
+    
+    result <- lapply(col_defs, function(x) {
+        df <- data.frame(
+            matrix(NA, nrow=1, ncol=length(x$name))
+        )
+        names(df) <- x$name
+        df <- df[FALSE, ]
+        df <- lapply(df, as.character)
+        df
     })
-    names(result) <- gsub('\\.csv', '', basename(tempFiles))
-    numCols <- list(
-        'analyses' = c('analysis_sample_rate_khz',
-                       'analysis_min_frequency_khz',
-                       'analysis_max_frequency_khz'),
-        'detections' = c('detection_effort_secs',
-                         'detection_n_validated',
-                         'detection_n_total',
-                         'detection_latitude',
-                         'detection_longitude',
-                         'detection_received_level_db',
-                         'detection_n_animals',
-                         'detection_n_animals_min',
-                         'detection_n_animals_max',
-                         'localization_latitude',
-                         'localization_latitude_min',
-                         'localization_latitude_max',
-                         'localization_longitude',
-                         'localization_longitude_min',
-                         'localization_longitude_max',
-                         'localization_distance_m',
-                         'localization_distance_m_min',
-                         'localization_distance_m_max',
-                         'localization_bearing',
-                         'localization_bearing_min',
-                         'localization_bearing_max',
-                         'localization_depth_n_signals',
-                         'localizatoin_depth_m',
-                         'localization_depth_m_min',
-                         'localization_depth_m_max'),
-        'deployments' = c('deployment_water_depth_m', 
-                          'deployment_latitude', 
-                          'deployment_longitude',
-                          'recovery_latitude',
-                          'recovery_longitude'),
-        'recordings' = c('recording_duration_secs',
-                         'recording_interval_secs',
-                         'recording_sample_rate_khz',
-                         'recording_bit_depth',
-                         'recording_channel',
-                         'recording_n_channels',
-                         'recording_usable_min_frequency_khz',
-                         'recording_usable_max_frequency_khz',
-                         'recording_device_depth_m'),
-        'recording_intervals' = c('recording_interval_channel',
-                                  'recording_interval_min_frequency_khz',
-                                  'recording_interval_max_frequency_khz'),
-        'devices' = c(),
-        'projects' = c(),
-        'sites' = c('site_latitude', 'site_longitude'),
-        'track_positions' = c('track_position_latitude',
-                              'track_position_longitude',
-                              'track_position_speed_knots',
-                              'track_position_depth_m'),
-        'tracks' = c()
-        
-    )
-    boolCols <- list(
-        'analyses' = c('analysis_release_data',
-                       'analysis_release_pacm'),
-        'recordings' = c('recording_redacted',
-                         'recording_device_lost'),
-        'deployments' = c(),
-        'detections' = c(),
-        'recording_intervals' = c(),
-        'devices' = c(),
-        'projects' = c(),
-        'sites' = c(),
-        'track_positions' = c(),
-        'tracks' = c()
-    )
+    numCols <- lapply(col_defs, function(x) {
+        x$name[x$type %in% c('float', 'integer')]
+    })
+    boolCols <- lapply(col_defs, function(x) {
+        x$name[x$type %in% c('bool')]
+    })
+    # names(result) <- gsub('\\.csv', '', basename(tempFiles))
+    # numCols <- list(
+    #     'analyses' = c('analysis_sample_rate_khz',
+    #                    'analysis_min_frequency_khz',
+    #                    'analysis_max_frequency_khz'),
+    #     'detections' = c('detection_effort_secs',
+    #                      'detection_n_validated',
+    #                      'detection_n_total',
+    #                      'detection_latitude',
+    #                      'detection_longitude',
+    #                      'detection_received_level_db',
+    #                      'detection_n_animals',
+    #                      'detection_n_animals_min',
+    #                      'detection_n_animals_max',
+    #                      'localization_latitude',
+    #                      'localization_latitude_min',
+    #                      'localization_latitude_max',
+    #                      'localization_longitude',
+    #                      'localization_longitude_min',
+    #                      'localization_longitude_max',
+    #                      'localization_distance_m',
+    #                      'localization_distance_m_min',
+    #                      'localization_distance_m_max',
+    #                      'localization_bearing',
+    #                      'localization_bearing_min',
+    #                      'localization_bearing_max',
+    #                      'localization_depth_n_signals',
+    #                      'localizatoin_depth_m',
+    #                      'localization_depth_m_min',
+    #                      'localization_depth_m_max'),
+    #     'deployments' = c('deployment_water_depth_m', 
+    #                       'deployment_latitude', 
+    #                       'deployment_longitude',
+    #                       'recovery_latitude',
+    #                       'recovery_longitude'),
+    #     'recordings' = c('recording_duration_secs',
+    #                      'recording_interval_secs',
+    #                      'recording_sample_rate_khz',
+    #                      'recording_bit_depth',
+    #                      'recording_channel',
+    #                      'recording_n_channels',
+    #                      'recording_usable_min_frequency_khz',
+    #                      'recording_usable_max_frequency_khz',
+    #                      'recording_device_depth_m'),
+    #     'recording_intervals' = c('recording_interval_channel',
+    #                               'recording_interval_min_frequency_khz',
+    #                               'recording_interval_max_frequency_khz'),
+    #     'devices' = c(),
+    #     'projects' = c(),
+    #     'sites' = c('site_latitude', 'site_longitude'),
+    #     'track_positions' = c('track_position_latitude',
+    #                           'track_position_longitude',
+    #                           'track_position_speed_knots',
+    #                           'track_position_depth_m'),
+    #     'tracks' = c()
+    #     
+    # )
+    # boolCols <- list(
+    #     'analyses' = c('analysis_release_data',
+    #                    'analysis_release_pacm'),
+    #     'recordings' = c('recording_redacted',
+    #                      'recording_device_lost'),
+    #     'deployments' = c(),
+    #     'detections' = c(),
+    #     'recording_intervals' = c(),
+    #     'devices' = c(),
+    #     'projects' = c(),
+    #     'sites' = c(),
+    #     'track_positions' = c(),
+    #     'tracks' = c()
+    # )
     for(n in names(result)) {
         for(col in numCols[[n]]) {
             result[[n]][[col]] <- as.numeric(result[[n]][[col]])

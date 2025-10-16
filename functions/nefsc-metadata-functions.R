@@ -1,5 +1,5 @@
 # Project-Specific ----
-# Packages httr, rjson
+# Packages httr, rjson, dplyr
 
 readPaDataSmart <- function(secrets=NULL, token, id) {
     if(!is.null(secrets)) {
@@ -116,6 +116,7 @@ readStDeploymentSmart <- function(secrets=NULL, token, id) {
     data <- smartToDf(apiData)
     # data <- data %>%
     #     filter(Status == 'Recovered')
+    data[['ST600 Serial Number:']] <- gsub('\\*', '', data[['ST600 Serial Number:']])
     data
 }
 
