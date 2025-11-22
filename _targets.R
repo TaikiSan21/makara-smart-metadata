@@ -35,8 +35,9 @@ list(
         list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
             'pacm_status_to_export' = c('READY'),
+            # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED', 'NA'),
             # Whether or not to export data already present in DB TRUE/FALSE
-            'export_already_in_db' = F,
+            'export_already_in_db' = TRUE,
             # identify specific deployments to skip, if wanted
             'skip_deployments' = c('NEFSC_TEMP-EXP_202503_AVAST_ST7393',
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8024',
@@ -57,6 +58,13 @@ list(
             'fpod_tz' = 'UTC',
             'instrument_type' = 'SOUNDTRAP'
         )
+    }),
+    # manual values ----
+    tar_target(manual, {
+        # dplyr::tribble(
+        #     ~table, ~condition, ~column, ~value
+        #     'deployments', 'deployment_code == "NEFSC_MA-RI_202309_NS03"', 'deployment_latitude', 12
+        # )
     }),
     # templates ----
     # tar_target(template_dir, 'templates'),
@@ -622,6 +630,30 @@ list(
                               any_of(c(names(templates$recording_intervals), 
                                        'compromised_starts',
                                        'compromised_ends')))
+        # manual janking
+        dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- 40.8622
+        dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- -70.324329
+        
+        dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- 41.352254
+        dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- -70.324329
+        
+        dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- 41.352254
+        dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- -70.324329
+        
+        dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- -31.71245
+        dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 115.61445
+        
+        dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- -30.869070
+        dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- 156.299920
+        
+        rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202309_NS03' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-7414'
+        rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-1677778960'
+        rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-8924'
+        rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5458'
+        rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5473'
+        
+        rec_out$recording_timezone[rec_out$deployment_code == 'NEFSC_MA-RI_202402_PWN04' & rec_out$recording_code == 'SOUNDTRAP_RECORDING'] <- NA
+        rec_out$recording_timezone[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 'UTC'
         out <- list(deployments=dep_out,
                     recordings=rec_out)
         rec_int_out <- formatRecordingIntervals(rec_int_out)
@@ -643,13 +675,14 @@ list(
         checkWarnings(out)
         out
     }),
+    tar_target(output_dir, 'outputs'),
     tar_target(output, {
-        writeTemplateOutput(db_check, folder='outputs')
-        'outputs'
+        writeTemplateOutput(db_check, folder=output_dir)
+        output_dir
     }, format='file'),
     tar_target(validatr, {
         validate_submission(output, 
-                            output_file = 'outputs/validation_results.csv',
+                            output_file = file.path(output_dir, 'validation_results.csv'),
                             verbose=FALSE)
     })
 )

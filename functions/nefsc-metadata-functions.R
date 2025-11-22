@@ -234,6 +234,7 @@ addNefscProjectCode <- function(x) {
                     project_code == 'NEFSC_VA_ES' ~ 'NEFSC_VA',
                     project_code == 'NEFSC_VA_PWNVA' ~ 'NEFSC_VA_POWERON',
                     project_code == 'NEFSC_MA-RI_MUSK' ~ 'NEFSC_MA-RI_SEAL',
+                    project_code == 'NEFSC_MA-RI_MONO' ~ 'NEFSC_MA-RI_SEAL',
                     .default=NA
                 )
     )

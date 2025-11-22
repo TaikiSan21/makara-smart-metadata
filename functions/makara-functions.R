@@ -275,7 +275,25 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE) {
                                 message=paste0('Mandatory columns ', 
                                                printN(thisMand[missMand], Inf), ' are missing'))
         }
-        
+        # Fix time columns
+        timeCols <- grep('datetime', names(thisData), value=TRUE)
+        for(t in timeCols) {
+            if(inherits(thisData[[t]], 'POSIXct')) {
+                thisData[[t]] <- psxTo8601(thisData[[t]])
+            }
+            alreadyNa <- is.na(thisData[[t]]) | thisData[[t]] == ''
+            times <- makeValidTime(thisData[[t]][!alreadyNa])
+            goodTime <- !is.na(times)
+            thisData[[t]][!alreadyNa][goodTime] <- times[goodTime]
+            if(any(!goodTime)) {
+                warns <- addWarning(warns, deployment=thisData$deployment_code[!alreadyNa][!goodTime],
+                                    type='Invalid Time',
+                                    table=n,
+                                    message=paste0("Time '", thisData[[t]][!alreadyNa][!goodTime], "' in column '",
+                                                   t, "'could not be converted'"))
+            }
+            
+        }
         # check that values in mandatory columns are not NA or ''
         for(m in thisMand[!missMand]) {
             if(is.character(thisTemp[[m]])) {
@@ -289,24 +307,27 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE) {
                 }
                 thisData[[m]][blankChar] <- NA
             }
-            if(m == 'recording_timezone') {
-                badTz <- !grepl('^UTC[+-]?[0-9:]{0,5}$', thisData[[m]])
-                if(any(badTz)) {
-                    warns <- addWarning(warns, deployment=thisData$deployment_code[badTz],
-                                        type='Invalid Timezone',
-                                        table=n,
-                                        message=paste0('Timezone ', thisData[[m]][badTz], ' is invalid'))
-                }
-            }
             
             naVals <- is.na(thisData[[m]])
+            if(m == 'recording_timezone') {
+                badTz <- !grepl('^UTC[+-]?[0-9:]{0,5}$', thisData[[m]][!naVals])
+                if(any(badTz)) {
+                    warns <- addWarning(warns, deployment=thisData$deployment_code[!naVals][badTz],
+                                        type='Invalid Timezone',
+                                        table=n,
+                                        message=paste0('Timezone ', thisData[[m]][!naVals][badTz], ' is invalid'))
+                }
+            }
             # some columns in recordings are only mandatory if not lost
             # and not UNUSABLE
             if(n == 'recordings' &&
                m %in% onlyNotLost) {
                 notLost <- !sapply(thisData$recording_device_lost, isTRUE)
-                notUnusable <- thisData$recording_quality_code != 'UNUSABLE' | is.na(thisData$recording_quality_code)
-                naVals <- naVals & notLost & notUnusable
+                naVals <- naVals & notLost
+                if('recording_quality_code' %in% names(thisData)) {
+                    notUnusable <- thisData$recording_quality_code != 'UNUSABLE' | is.na(thisData$recording_quality_code)
+                    naVals <- naVals & notUnusable
+                }
             }
             if(n == 'detections' &&
                m == 'localization_method_code') {
@@ -328,22 +349,7 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE) {
                                                    m, "' is NA"))
             }
         }
-        # Fix time columns
-        timeCols <- grep('datetime', names(thisData), value=TRUE)
-        for(t in timeCols) {
-            alreadyNa <- is.na(thisData[[t]]) | thisData[[t]] == ''
-            times <- makeValidTime(thisData[[t]][!alreadyNa])
-            goodTime <- !is.na(times)
-            thisData[[t]][!alreadyNa][goodTime] <- times[goodTime]
-            if(any(!goodTime)) {
-                warns <- addWarning(warns, deployment=thisData$deployment_code[!alreadyNa][!goodTime],
-                                    type='Invalid Time',
-                                    table=n,
-                                    message=paste0("Time '", thisData[[t]][!alreadyNa][!goodTime], "' in column '",
-                                                   t, "'could not be converted'"))
-            }
-            
-        }
+        
         # Remove columns that werent in our loaded data and are not mandatory
         if(isTRUE(dropEmpty)) {
             keepNames <- names(thisTemp) %in% unique(c(names(thisData), thisMand))
@@ -614,6 +620,9 @@ writeTemplateOutput <- function(data, folder='outputs') {
     }
     for(n in names(data)) {
         outFile <- file.path(folder, paste0(n, '.csv'))
+        if(length(data[[n]]) == 0) {
+            next
+        }
         data[[n]] %>% 
             fixUTF8 %>% 
             write.csv(file=outFile, row.names=FALSE, na='')
