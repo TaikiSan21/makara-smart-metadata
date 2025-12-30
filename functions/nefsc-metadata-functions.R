@@ -248,6 +248,8 @@ addNefscProjectCode <- function(x) {
             x$project_code[i] <- gsub(projPattern, '\\1', x$deployment_code[i])
         }
     }
+    pauOrg <- x$organization_code == 'PARKSAU'
+    x$project_code[pauOrg] <- gsub('_[0-9]*$', '', x$project_code[pauOrg])
     x
 }
 

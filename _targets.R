@@ -385,7 +385,7 @@ list(
         )
         # ONLY GET FPOD HERE
         fpod <- myRenamer(st_deployment_raw[-dropIx, ],
-                               map=fpod_map)
+                          map=fpod_map)
         fpod$recording_device_depth_m <- as.numeric(fpod$recording_device_depth_m)
         fpod$deployment_water_depth_m <- as.numeric(fpod$deployment_water_depth_m)
         fpod$depth_comment <- NA
@@ -418,7 +418,7 @@ list(
             'Sat. Tracker Model?' = 'satellite_model',
             'Sat. Tracker Serial Number' = 'satellite_number'
         )
-
+        
         deployment <- myRenamer(st_deployment_raw[-dropIx, ],
                                 map=st_deployment_map)
         # case if model name not given but ID is, assume tidbit
@@ -447,16 +447,16 @@ list(
         deployment <- unite(deployment, 'satellite_code', c('satellite_model', 'satellite_number'),
                             sep='-', na.rm=TRUE)
         deployment$satellite_code[deployment$satellite_code == ''] <- NA
-
+        
         deployment$recording_device <- paste0('SOUNDTRAP-', deployment$recording_device)
-
-
+        
+        
         deployment$fpod_device <- gsub('N/?A', '', deployment$fpod_device)
         deployment$fpod_device[deployment$fpod_device == ''] <- NA
         deployment$fpod_device[!is.na(deployment$fpod_device)] <- paste0('FPOD-', deployment$fpod_device[!is.na(deployment$fpod_device)])
         deployment <- unite(deployment, deployment_device_codes,
-                        c('recording_device', 'temp_code', 'release_code', 'satellite_code', 'fpod_device'),
-                        na.rm=TRUE, sep=',')
+                            c('recording_device', 'temp_code', 'release_code', 'satellite_code', 'fpod_device'),
+                            na.rm=TRUE, sep=',')
         deployment <- deployment[c('deployment_code', 'deployment_device_codes')]
         # some deploy are here twice bc two STs, combine and distinct
         # multiRecorderDep <- names(which(table(deployment$deployment_code) > 1))
@@ -480,8 +480,8 @@ list(
             unnest(device_code) %>% 
             distinct() %>%
             select(deployment_code, device_code)
-            # summarise(deployment_device_codes=paste0(deployment_device_codes, collapse=','),
-            #           .by=deployment_code)
+        # summarise(deployment_device_codes=paste0(deployment_device_codes, collapse=','),
+        #           .by=deployment_code)
     }),
     # FPOD ----
     tar_target(fpod_times, {
@@ -569,6 +569,7 @@ list(
             x$recovery_datetime[noRec] <- x$st_recovery_time[noRec]
             x
         }))
+        # print(table(result$organization_code))
         result <- addNefscProjectCode(result)
         result$pacm_db_status[is.na(result$pacm_db_status)] <- 'NA'
         result <- unite(result, 'recording_comments', c('recording_comments', 'depth_comment'), sep=';', na.rm=TRUE)
@@ -621,39 +622,104 @@ list(
         fpod_out$recording_timezone <- constants$fpod_tz
         fpod_out$recording_code <- 'FPOD_RECORDING'
         fpod_out$recording_bit_depth <- constants$fpod_bits
-        fpod_out$recording_filetypes <- NA
+        fpod_out$recording_filetypes <- NA_character_
         fpod_out$recording_channel <- constants$fpod_channel
         fpod_out$fpod_device <- NULL
+        fpod_out <- fpod_out %>% 
+            mutate(
+                recording_quality_code = case_when(
+                    deployment_code == 'NEFSC_GOM_202407_MDR' ~ 'UNUSABLE',
+                    deployment_code == 'NEFSC_GOM_202407_USTR11' ~ 'UNUSABLE',
+                    deployment_code == 'NEFSC_GOM_202412_USTR11' ~ 'UNUSABLE',
+                    .default = 'GOOD'),
+                recording_comments = case_when(
+                    deployment_code == 'NEFSC_GOM_202407_MDR' ~ 'No data - battery failure',
+                    deployment_code == 'NEFSC_GOM_202407_USTR11' ~ 'No data - software malfunction',
+                    deployment_code == 'NEFSC_GOM_202412_USTR11' ~ 'SD card was bent and data seeemd to be unrecoverable',
+                    .default = recording_comments),
+                recording_device_lost = FALSE
+            )
+        dropFpod <- is.na(fpod_out$recording_start_datetime) & 
+            (fpod_out$deployment_code %in% c('NEFSC_SBNMS_202405_SB03', 'NEFSC_SBNMS_202409_SB03'))
+        fpod_out <- fpod_out[!dropFpod, ]
         fpod_out <- distinct(fpod_out)
+        # print(str(rec_out))
         rec_out <- bind_rows(rec_out, fpod_out)
         rec_int_out <- select(result, 
                               any_of(c(names(templates$recording_intervals), 
                                        'compromised_starts',
                                        'compromised_ends')))
-        # manual janking
-        dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- 40.8622
-        dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- -70.324329
+        ## manual fixes ----
+        dep_out <- mutate(dep_out,
+                          deployment_latitude = case_when(
+                              deployment_code == 'NEFSC_MA-RI_202309_NS03' ~ 40.8622,
+                              deployment_code == 'NEFSC_MA-RI_202311_MUSK01' ~ 41.352254,
+                              deployment_code == 'NEFSC_MA-RI_202411_MUSK01' ~ 41.352254,
+                              deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' ~ -31.71245,
+                              deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES' ~ -30.869070,
+                              .default = deployment_latitude
+                          ),
+                          deployment_longitude = case_when(
+                              deployment_code == 'NEFSC_MA-RI_202309_NS03' ~ -70.2051,
+                              deployment_code == 'NEFSC_MA-RI_202311_MUSK01' ~ -70.324329,
+                              deployment_code == 'NEFSC_MA-RI_202411_MUSK01' ~ -70.324329,
+                              deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' ~ 115.61445,
+                              deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES' ~ 156.299920,
+                              .default = deployment_longitude
+                          )
+        )
+        rec_out <- mutate(rec_out,
+                          recording_device_lost = case_when(
+                              deployment_code == 'NEFSC_GOM_202301_USTR04' ~ FALSE,
+                              deployment_code == 'NEFSC_MA-RI_202311_MUSK01' ~ FALSE,
+                              deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' ~ FALSE,
+                              .default=recording_device_lost
+                          ),
+                          recording_quality_code = case_when(
+                              deployment_code == 'NEFSC_GOM_202301_USTR04' & recording_code == 'SOUNDTRAP_RECORDING' ~ 'COMPROMISED',
+                              deployment_code == 'NEFSC_MA-RI_202311_MUSK01' & recording_code == 'SOUNDTRAP_RECORDING' ~ 'GOOD',
+                              deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' & recording_code == 'SOUNDTRAP_RECORDING' ~ 'GOOD',
+                              deployment_code == 'NEFSC_VA_202310_ES02' & recording_code == 'SOUNDTRAP_RECORDING' ~ 'COMPROMISED',
+                              .default = recording_quality_code
+                          ),
+                          recording_device_codes = case_when(
+                              deployment_code == 'NEFSC_MA-RI_202309_NS03' & recording_device_codes == 'SOUNDTRAP-NA' ~ 'SOUNDTRAP-7414',
+                              deployment_code == 'NEFSC_MA-RI_202311_MUSK01' & recording_device_codes == 'SOUNDTRAP-NA' ~ 'SOUNDTRAP-1677778970',
+                              deployment_code == 'NEFSC_MA-RI_202411_MUSK01' & recording_device_codes == 'SOUNDTRAP-NA' ~ 'SOUNDTRAP-8924',
+                              deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' & recording_device_codes == 'SOUNDTRAP-NA' ~ 'SOUNDTRAP-5458',
+                              deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES' & recording_device_codes == 'SOUNDTRAP-NA' ~ 'SOUNDTRAP-5473',
+                              .default = recording_device_codes
+                          ),
+                          recording_timezone = case_when(
+                              deployment_code == 'NEFSC_MA-RI_202402_PWN04' & recording_code == 'SOUNDTRAP_RECORDING' ~ NA_character_,
+                              deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' ~ 'UTC',
+                              .default = recording_timezone
+                          )
+        )
+                              
+        # dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- 40.8622
+        # dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- -70.324329
+        # 
+        # dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- 41.352254
+        # dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- -70.324329
+        # 
+        # dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- 41.352254
+        # dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- -70.324329
+        # 
+        # dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- -31.71245
+        # dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 115.61445
+        # 
+        # dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- -30.869070
+        # dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- 156.299920
         
-        dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- 41.352254
-        dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- -70.324329
-        
-        dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- 41.352254
-        dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- -70.324329
-        
-        dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- -31.71245
-        dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 115.61445
-        
-        dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- -30.869070
-        dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- 156.299920
-        
-        rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202309_NS03' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-7414'
-        rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-1677778960'
-        rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-8924'
-        rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5458'
-        rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5473'
-        
-        rec_out$recording_timezone[rec_out$deployment_code == 'NEFSC_MA-RI_202402_PWN04' & rec_out$recording_code == 'SOUNDTRAP_RECORDING'] <- NA
-        rec_out$recording_timezone[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 'UTC'
+        # rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202309_NS03' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-7414'
+        # rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-1677778970'
+        # rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-8924'
+        # rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5458'
+        # rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5473'
+        # 
+        # rec_out$recording_timezone[rec_out$deployment_code == 'NEFSC_MA-RI_202402_PWN04' & rec_out$recording_code == 'SOUNDTRAP_RECORDING'] <- NA
+        # rec_out$recording_timezone[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 'UTC'
         out <- list(deployments=dep_out,
                     recordings=rec_out)
         rec_int_out <- formatRecordingIntervals(rec_int_out)
@@ -720,3 +786,6 @@ list(
 # have two Soundtraps - these get double entries in the smort shorts so double
 # check that outputs are not duplicated. In the temperature devices testing you
 # end up with satellite and such device codes with no number - incorrect
+
+
+# NEW DEVICE TYPES FOR SPECIFIC RECORDING DEVICES GO AND FIX THAT BEFORE SUBMITO
