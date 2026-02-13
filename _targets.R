@@ -16,6 +16,12 @@ tar_option_set(
 )
 
 # Run the R scripts in the R/ folder with your custom functions:
+# uncomment this chunk to force janky single-file update of my common functions
+# updateFunctions <- download.file('https://api.github.com/repos/TaikiSan21/makaraHelpers/contents/R/makara-functions.R', 
+#                      destfile = 'functions/makara-functions.R',
+#                      method='libcurl', 
+#                      headers=c('Accept'= 'application/vnd.github.v3.raw'),
+#                      extra='-O -L')
 tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 

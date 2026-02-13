@@ -1707,7 +1707,7 @@
     },
     "makaraValidatr": {
       "Package": "makaraValidatr",
-      "Version": "0.1.0",
+      "Version": "0.2.4",
       "Source": "GitHub",
       "Title": "Data validation tools for Makara passive acoustics monitoring database",
       "Authors@R": "person(\"Jeff\", \"Walker\", , \"jeffrey.walker@noaa.gov\", role = c(\"aut\", \"cre\"))",
@@ -1715,7 +1715,7 @@
       "License": "Apache License (>= 2) + file LICENSE",
       "Encoding": "UTF-8",
       "Roxygen": "list(markdown = TRUE)",
-      "RoxygenNote": "7.3.2",
+      "RoxygenNote": "7.3.3",
       "Depends": [
         "R (>= 4.1.0)"
       ],
@@ -1746,7 +1746,7 @@
       "RemoteRepo": "makaraValidatr",
       "RemoteUsername": "jeffwalkernoaa",
       "RemoteRef": "HEAD",
-      "RemoteSha": "d48f0d01b5e3608bbb1be840f3dae268e61f6ee9",
+      "RemoteSha": "41053c36e0b96b90f750dd61569b6ef56f674316",
       "NeedsCompilation": "no",
       "Author": "Jeff Walker [aut, cre]",
       "Maintainer": "Jeff Walker <jeffrey.walker@noaa.gov>"

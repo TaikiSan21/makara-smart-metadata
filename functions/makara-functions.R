@@ -1,71 +1,6 @@
 # Generic Makara Functions ----
 # Packages: dplyr, tidyr, lubridate, makaraValidatr
 
-## Constant values ----
-# List of mandatory fields for various tables
-# mandatory_fields <- list(
-#     'deployments' = list(
-#         'always' = c('organization_code', 'deployment_code', 'deployment_platform_type_code', 
-#                      'deployment_datetime', 'deployment_latitude', 'deployment_longitude'),
-#         'ncei' = c('project_code','site_code', 'recovery_datetime', 'recovery_longitude', #site if stationary
-#                    'recovery_latitude') 
-#     ),
-#     'detections' =  list(
-#         'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code',
-#                      'analysis_organization_code',
-#                      'detection_start_datetime', 'detection_end_datetime' ,
-#                      'detection_effort_secs', 'detection_sound_source_code',
-#                      'detection_call_type_code', 'detection_result_code'),
-#         'ncei' = c()
-#     ),
-#     'analyses' = list(
-#         'always' = c('deployment_organization_code', 'deployment_code', 'analysis_code', 'recording_codes',
-#                      'analysis_organization_code',
-#                      'analysis_sound_source_codes', 'analysis_granularity_code', 
-#                      'analysis_sample_rate_khz', 'analysis_processing_code', 
-#                      'analysis_quality_code', 'analysis_protocol_reference',
-#                      'analysis_release_data', 'analysis_release_pacm', 'detector_codes'),
-#         'ncei' = c('analysis_start_datetime', 'analysis_end_datetime', 'analysis_min_frequency_khz',
-#                    'analysis_max_frequency_khz')
-#     ),
-#     'recordings' = list(
-#         'always' = c('organization_code', 'deployment_code', 'recording_code', 
-#                      'recording_device_codes', 'recording_start_datetime', 'recording_interval_secs',
-#                      'recording_sample_rate_khz', 'recording_duration_secs',
-#                      'recording_n_channels', 'recording_timezone'), # many are only if not lsot
-#         'ncei' = c('recording_end_datetime', 'recording_bit_depth', 'recording_channel',
-#                    'recording_quality_code', 'recording_device_depth_m', 'recording_json')
-#     ),
-#     'recording_intervals' = list(
-#         'always' = c('organization_code', 'deployment_code', 'recording_code',
-#                      'recording_interval_quality_code'),
-#         'ncei' = c()
-#     ),
-#     'devices' = list(
-#         'always' = c('organization_code', 'device_code', 'device_type_code'),
-#         'ncei' = c()
-#     ),
-#     'projects' = list(
-#         'always' = c('organization_code', 'project_code', 'project_contacts'),
-#         'ncei' = c()
-#     ),
-#     'sites' = list(
-#         'always' = c('organization_code', 'site_code'),
-#         'ncei' = c()
-#     ),
-#     'track_positions' = list(
-#         'always' = c('organization_code', 'deployment_code', 'track_code',
-#                      'track_position_datetime',
-#                      'track_position_latitude',
-#                      'track_position_longitude'),
-#         'ncei' = c()
-#     ),
-#     'tracks' = list(
-#         'always' = c('organization_code', 'deployment_code', 'track_code'),
-#         'ncei' = c()
-#     )
-# )
-
 ## Functions ----
 # map is list of form old=new
 # renames either values in a vector or names of dataframe
@@ -278,9 +213,11 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE) {
         # Fix time columns
         timeCols <- grep('datetime', names(thisData), value=TRUE)
         for(t in timeCols) {
+            # no problems converting if its already posix
             if(inherits(thisData[[t]], 'POSIXct')) {
                 thisData[[t]] <- psxTo8601(thisData[[t]])
-            }
+                next
+            } 
             alreadyNa <- is.na(thisData[[t]]) | thisData[[t]] == ''
             times <- makeValidTime(thisData[[t]][!alreadyNa])
             goodTime <- !is.na(times)
@@ -307,17 +244,17 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE) {
                 }
                 thisData[[m]][blankChar] <- NA
             }
-            
-            naVals <- is.na(thisData[[m]])
             if(m == 'recording_timezone') {
-                badTz <- !grepl('^UTC[+-]?[0-9:]{0,5}$', thisData[[m]][!naVals])
+                badTz <- !grepl('^UTC[+-]?[0-9:]{0,5}$', thisData[[m]])
                 if(any(badTz)) {
-                    warns <- addWarning(warns, deployment=thisData$deployment_code[!naVals][badTz],
+                    warns <- addWarning(warns, deployment=thisData$deployment_code[badTz],
                                         type='Invalid Timezone',
                                         table=n,
-                                        message=paste0('Timezone ', thisData[[m]][!naVals][badTz], ' is invalid'))
+                                        message=paste0('Timezone ', thisData[[m]][badTz], ' is invalid'))
                 }
             }
+            
+            naVals <- is.na(thisData[[m]])
             # some columns in recordings are only mandatory if not lost
             # and not UNUSABLE
             if(n == 'recordings' &&
@@ -368,7 +305,7 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE) {
 # Pretty printing helper for warnings created with `addWarning`
 checkWarnings <- function(x) {
     if(!'warnings' %in% names(x) ||
-       nrow(x$warnings) == 0) {
+       length(x$warnings) == 0) {
         return(NULL)
     }
     alls <- x$warnings$deployment == 'All'
@@ -390,6 +327,9 @@ checkWarnings <- function(x) {
 }
 # convert date characters to proper 8601 style output
 makeValidTime <- function(x) {
+    if(inherits(x, 'POSIXct')) {
+        return(psxTo8601(x))
+    }
     out <- rep(NA_character_, length(x))
     for(i in seq_along(x)) {
         val <- x[i]
@@ -412,16 +352,6 @@ makeValidTime <- function(x) {
     }
     out
 }
-
-# checkValidTimezone <- function(rec) {
-#     isBad <- !grepl('^UTC[+-]?[0-9]{0,4}$', rec$recording_timezone)
-#     if(any(isBad)) {
-#         warning(sum(isBad), ' deployments (', printN(rec$deployment_code[isBad], Inf),
-#                 ') have timezones that are invalid (', printN(unique(rec$recording_timezone[isBad]), Inf), 
-#                 ')')
-#     }
-#     rec
-# }
 
 # Check if codes being used are actually in database
 # Currently checks recording_device_codes, deployment device_codes, project_codes,
@@ -496,59 +426,6 @@ checkDbValues <- function(x, db) {
 
 # Checks if deployments, recordings, and recording_intervals
 # are already in makara 
-# checkAlreadyDb <- function(x, db) {
-#     # deployment and recording checko
-#     dep_rec <- left_join(
-#         rename(db$deployments, deployment_id=id),
-#         select(db$recordings, recording_code, deployment_id),
-#         by='deployment_id'
-#     ) %>% 
-#         mutate(JOINCHECK=TRUE)
-#     depCheck <- left_join(
-#         x$deployments,
-#         distinct(select(dep_rec, organization_code, deployment_code, JOINCHECK)),
-#         by=c('organization_code', 'deployment_code')
-#     )
-#     newDep <- is.na(depCheck$JOINCHECK)
-#     x$deployments$new <- newDep
-#     recCheck <- left_join(
-#         x$recordings,
-#         dep_rec,
-#         by=c('organization_code', 'deployment_code', 'recording_code')
-#     )
-#     newRec <- is.na(recCheck$JOINCHECK)
-#     x$recordings$new <- newRec
-#     newDep <- sum(x$deployments$new)
-#     newRec <- sum(x$recordings$new)
-#     message(newDep, ' out of ', nrow(x$deployments), ' deployments are new (not yet in Makara)')
-#     message(newRec , ' out of ', nrow(x$recordings), ' recordings are new (not yet in Makara)')
-#     if('recording_intervals' %in% names(x)) {
-#         intData <- left_join(
-#             db$recording_intervals, 
-#             select(db$recordings, deployment_id, id, recording_code), 
-#             by=c('recording_id'='id')) %>% 
-#             left_join(
-#                 select(db$deployments, deployment_id=id, deployment_code),
-#                 by='deployment_id'
-#             ) %>% 
-#             select(deployment_code, recording_code, 
-#                    recording_interval_start_datetime) %>% 
-#             mutate(JOINCHECK=TRUE,
-#                    recording_interval_start_datetime=format(recording_interval_start_datetime, 
-#                                                             format='%Y-%m-%d %H:%M:%S'))
-#         intCheck <- left_join(
-#             x$recording_intervals,
-#             intData,
-#             by=c('deployment_code', 'recording_code', 'recording_interval_start_datetime'))
-#         newInt <- is.na(intCheck$JOINCHECK)
-#         x$recording_intervals$new <- newInt
-#         newInt <- sum(x$recording_intervals$new)
-#         message(newInt, ' out of ', nrow(x$recording_intervals), 
-#                 ' recording_intervals are new (not yet in Makara)')
-#     }
-#     x
-# }
-# reworked for BQ database
 checkAlreadyDb <- function(x, db) {
     # deployment and recording checko
     dep_rec <- db$recordings %>% 
@@ -632,13 +509,6 @@ writeTemplateOutput <- function(data, folder='outputs') {
 # folder containing template .csv files
 # applies column types for enforcing later
 formatBasicTemplates <- function() {
-    # tempFiles <- list.files(folder, pattern='csv$', full.names=TRUE, recursive=TRUE)
-    # result <- lapply(tempFiles, function(x) {
-    #     # sometimes incomplete final line warning, ignore it
-    #     table <- suppressWarnings(read.csv(x, stringsAsFactors=FALSE))
-    #     table <- lapply(table, as.character)
-    #     table
-    # })
     col_defs <- makaraValidatr::column_definitions
     
     result <- lapply(col_defs, function(x) {
@@ -656,77 +526,6 @@ formatBasicTemplates <- function() {
     boolCols <- lapply(col_defs, function(x) {
         x$name[x$type %in% c('bool')]
     })
-    # names(result) <- gsub('\\.csv', '', basename(tempFiles))
-    # numCols <- list(
-    #     'analyses' = c('analysis_sample_rate_khz',
-    #                    'analysis_min_frequency_khz',
-    #                    'analysis_max_frequency_khz'),
-    #     'detections' = c('detection_effort_secs',
-    #                      'detection_n_validated',
-    #                      'detection_n_total',
-    #                      'detection_latitude',
-    #                      'detection_longitude',
-    #                      'detection_received_level_db',
-    #                      'detection_n_animals',
-    #                      'detection_n_animals_min',
-    #                      'detection_n_animals_max',
-    #                      'localization_latitude',
-    #                      'localization_latitude_min',
-    #                      'localization_latitude_max',
-    #                      'localization_longitude',
-    #                      'localization_longitude_min',
-    #                      'localization_longitude_max',
-    #                      'localization_distance_m',
-    #                      'localization_distance_m_min',
-    #                      'localization_distance_m_max',
-    #                      'localization_bearing',
-    #                      'localization_bearing_min',
-    #                      'localization_bearing_max',
-    #                      'localization_depth_n_signals',
-    #                      'localizatoin_depth_m',
-    #                      'localization_depth_m_min',
-    #                      'localization_depth_m_max'),
-    #     'deployments' = c('deployment_water_depth_m', 
-    #                       'deployment_latitude', 
-    #                       'deployment_longitude',
-    #                       'recovery_latitude',
-    #                       'recovery_longitude'),
-    #     'recordings' = c('recording_duration_secs',
-    #                      'recording_interval_secs',
-    #                      'recording_sample_rate_khz',
-    #                      'recording_bit_depth',
-    #                      'recording_channel',
-    #                      'recording_n_channels',
-    #                      'recording_usable_min_frequency_khz',
-    #                      'recording_usable_max_frequency_khz',
-    #                      'recording_device_depth_m'),
-    #     'recording_intervals' = c('recording_interval_channel',
-    #                               'recording_interval_min_frequency_khz',
-    #                               'recording_interval_max_frequency_khz'),
-    #     'devices' = c(),
-    #     'projects' = c(),
-    #     'sites' = c('site_latitude', 'site_longitude'),
-    #     'track_positions' = c('track_position_latitude',
-    #                           'track_position_longitude',
-    #                           'track_position_speed_knots',
-    #                           'track_position_depth_m'),
-    #     'tracks' = c()
-    #     
-    # )
-    # boolCols <- list(
-    #     'analyses' = c('analysis_release_data',
-    #                    'analysis_release_pacm'),
-    #     'recordings' = c('recording_redacted',
-    #                      'recording_device_lost'),
-    #     'deployments' = c(),
-    #     'detections' = c(),
-    #     'recording_intervals' = c(),
-    #     'devices' = c(),
-    #     'projects' = c(),
-    #     'sites' = c(),
-    #     'track_positions' = c(),
-    #     'tracks' = c()
-    # )
     for(n in names(result)) {
         for(col in numCols[[n]]) {
             result[[n]][[col]] <- as.numeric(result[[n]][[col]])
