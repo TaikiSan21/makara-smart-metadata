@@ -235,6 +235,7 @@ addNefscProjectCode <- function(x) {
                     project_code == 'NEFSC_VA_PWNVA' ~ 'NEFSC_VA_POWERON',
                     project_code == 'NEFSC_MA-RI_MUSK' ~ 'NEFSC_MA-RI_SEAL',
                     project_code == 'NEFSC_MA-RI_MONO' ~ 'NEFSC_MA-RI_SEAL',
+                    project_code == 'PMEL_SBNMS' ~ 'PMEL_SBNMS-NRS',
                     .default=NA
                 )
     )
@@ -242,10 +243,11 @@ addNefscProjectCode <- function(x) {
     x$project_code[tncOrg] <- gsub('^([A-Z]*_[A-Z]*)_.*', '\\1', x$deployment_code[tncOrg])
     otherOrgNA <- !x$organization_code %in% c('NEFSC', 'TNC') &
         is.na(x$project_code)
+    # skip doing this, was making it harder to track down problems
     projPattern <- '^([A-Z]*_[A-Z]*_[0-9]*).*'
     for(i in which(otherOrgNA)) {
         if(grepl(projPattern, x$deployment_code[i])) {
-            x$project_code[i] <- gsub(projPattern, '\\1', x$deployment_code[i])
+            # x$project_code[i] <- gsub(projPattern, '\\1', x$deployment_code[i])
         }
     }
     pauOrg <- x$organization_code == 'PARKSAU'

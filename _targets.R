@@ -41,7 +41,7 @@ list(
         list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
             'pacm_status_to_export' = c('READY'),
-            # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED', 'NA'),
+            # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED'),
             # Whether or not to export data already present in DB TRUE/FALSE
             'export_already_in_db' = TRUE,
             # identify specific deployments to skip, if wanted
@@ -85,50 +85,56 @@ list(
         read_yaml(secrets_file)
     }),
     tar_target(db_raw, {
-        ds <- bq_dataset(secrets$bq_project, 
-                         secrets$bq_dataset)
-        tb_ref <- bq_dataset_query(ds, query = "select * from view_reference_codes")
-        df_ref <- bq_table_download(tb_ref)
-        
-        tb_org <- bq_dataset_query(ds, query = "select * from view_organization_codes")
-        df_org <- bq_table_download(tb_org)
-        
-        recint_q <- bq_dataset_query(ds, query = "select 
-                             ri.recording_interval_start_datetime,
-                             ri.recording_interval_end_datetime,
-                             r.recording_code,
-                             d.deployment_code
-                             from recording_intervals ri 
-                             left join 
-                             recordings r 
-                             on ri.recording_id = r.id
-                             left join
-                             deployments d
-                             on  r.deployment_id = d.id")
-        
-        recint_df <- bq_table_download(recint_q)
-        
-        list(db_ref=df_ref,
-             db_org=df_org,
-             db_rec_int=recint_df)
+        downloadBqMakara()
     }, cue=tar_cue(reload_database)),
-    # transform into list of db$table_name
     tar_target(db, {
-        result <- split(db_raw$db_org, db_raw$db_org$table)
-        result <- lapply(result, function(x) {
-            code_prefix <- switch(
-                x$table[1],
-                'analyses' = 'analysis_code',
-                paste0(gsub('s$', '', x$table[1]), '_code')
-            )
-            names(x)[3] <- code_prefix
-            keepCol <- which(sapply(x, function(col) !all(is.na(col))))
-            x[keepCol]
-        })
-        result$recording_intervals <- db_raw$db_rec_int
-        result$reference_codes <- db_raw$db_ref
-        result
+        formatBqMakara(db_raw)
     }),
+    # tar_target(db_raw, {
+    #     ds <- bq_dataset(secrets$bq_project, 
+    #                      secrets$bq_dataset)
+    #     tb_ref <- bq_dataset_query(ds, query = "select * from view_reference_codes")
+    #     df_ref <- bq_table_download(tb_ref)
+    #     
+    #     tb_org <- bq_dataset_query(ds, query = "select * from view_organization_codes")
+    #     df_org <- bq_table_download(tb_org)
+    #     
+    #     recint_q <- bq_dataset_query(ds, query = "select 
+    #                          ri.recording_interval_start_datetime,
+    #                          ri.recording_interval_end_datetime,
+    #                          r.recording_code,
+    #                          d.deployment_code
+    #                          from recording_intervals ri 
+    #                          left join 
+    #                          recordings r 
+    #                          on ri.recording_id = r.id
+    #                          left join
+    #                          deployments d
+    #                          on  r.deployment_id = d.id")
+    #     
+    #     recint_df <- bq_table_download(recint_q)
+    #     
+    #     list(db_ref=df_ref,
+    #          db_org=df_org,
+    #          db_rec_int=recint_df)
+    # }, cue=tar_cue(reload_database)),
+    # transform into list of db$table_name
+    # tar_target(db, {
+    #     result <- split(db_raw$db_org, db_raw$db_org$table)
+    #     result <- lapply(result, function(x) {
+    #         code_prefix <- switch(
+    #             x$table[1],
+    #             'analyses' = 'analysis_code',
+    #             paste0(gsub('s$', '', x$table[1]), '_code')
+    #         )
+    #         names(x)[3] <- code_prefix
+    #         keepCol <- which(sapply(x, function(col) !all(is.na(col))))
+    #         x[keepCol]
+    #     })
+    #     result$recording_intervals <- db_raw$db_rec_int
+    #     result$reference_codes <- db_raw$db_ref
+    #     result
+    # }),
     # tar_target(db, {
     #     if(isTRUE(use_local_database)) {
     #         db_folder <- 'local_db'
@@ -511,6 +517,9 @@ list(
             rename(st_deploy_time = deployment_datetime,
                    st_recovery_time = recovery_datetime)
         result <- qaqc_google
+        result$pacm_db_status[is.na(result$pacm_db_status)] <- 'NA'
+        result <- result %>% 
+            filter(pacm_db_status %in% params$pacm_status_to_export)
         result$deployment_platform_type_code <- constants$platform
         if(length(params$skip_deployments) > 0) {
             dropIx <- which(result$deployment_code %in% params$skip_deployments)
@@ -577,10 +586,7 @@ list(
         }))
         # print(table(result$organization_code))
         result <- addNefscProjectCode(result)
-        result$pacm_db_status[is.na(result$pacm_db_status)] <- 'NA'
         result <- unite(result, 'recording_comments', c('recording_comments', 'depth_comment'), sep=';', na.rm=TRUE)
-        result <- result %>% 
-            filter(pacm_db_status %in% params$pacm_status_to_export)
         dep_out <- select(result, any_of(c(names(templates$deployments), 'pacm_db_status', 'deployment_status')))
         rec_out <- select(result, any_of(names(templates$recordings)))
         multiRecorderDep <- names(which(table(rec_out$deployment_code) > 1))
