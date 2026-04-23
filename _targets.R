@@ -17,16 +17,16 @@ tar_option_set(
 
 # Run the R scripts in the R/ folder with your custom functions:
 # uncomment this chunk to force janky single-file update of my common functions
-# updateFunctions <- download.file('https://api.github.com/repos/TaikiSan21/makaraHelpers/contents/R/makara-functions.R', 
+# updateFunctions <- download.file('https://api.github.com/repos/TaikiSan21/makaraHelpers/contents/R/makara-functions.R',
 #                      destfile = 'functions/makara-functions.R',
-#                      method='libcurl', 
+#                      method='libcurl',
 #                      headers=c('Accept'= 'application/vnd.github.v3.raw'),
 #                      extra='-O -L')
 tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
-# Can be set to "always" or "never"
-reload_database <- 'never'
+# Can be set to "always" or "thorough"
+reload_database <- 'thorough'
 use_local_database <- FALSE
 
 # don't change this
@@ -41,9 +41,14 @@ list(
         list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
             'pacm_status_to_export' = c('READY'),
+            # 'pacm_status_to_export' = c('READY', 'NA'),
             # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED'),
             # Whether or not to export data already present in DB TRUE/FALSE
             'export_already_in_db' = TRUE,
+            # Allow replacing non-NA databse values with NA - almost always FALSE
+            'replace_db_with_na' = FALSE,
+            # keep extra columns with output - for testing
+            'keep_extra_columns' = TRUE,
             # identify specific deployments to skip, if wanted
             'skip_deployments' = c('NEFSC_TEMP-EXP_202503_AVAST_ST7393',
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8024',
@@ -90,98 +95,6 @@ list(
     tar_target(db, {
         formatBqMakara(db_raw)
     }),
-    # tar_target(db_raw, {
-    #     ds <- bq_dataset(secrets$bq_project, 
-    #                      secrets$bq_dataset)
-    #     tb_ref <- bq_dataset_query(ds, query = "select * from view_reference_codes")
-    #     df_ref <- bq_table_download(tb_ref)
-    #     
-    #     tb_org <- bq_dataset_query(ds, query = "select * from view_organization_codes")
-    #     df_org <- bq_table_download(tb_org)
-    #     
-    #     recint_q <- bq_dataset_query(ds, query = "select 
-    #                          ri.recording_interval_start_datetime,
-    #                          ri.recording_interval_end_datetime,
-    #                          r.recording_code,
-    #                          d.deployment_code
-    #                          from recording_intervals ri 
-    #                          left join 
-    #                          recordings r 
-    #                          on ri.recording_id = r.id
-    #                          left join
-    #                          deployments d
-    #                          on  r.deployment_id = d.id")
-    #     
-    #     recint_df <- bq_table_download(recint_q)
-    #     
-    #     list(db_ref=df_ref,
-    #          db_org=df_org,
-    #          db_rec_int=recint_df)
-    # }, cue=tar_cue(reload_database)),
-    # transform into list of db$table_name
-    # tar_target(db, {
-    #     result <- split(db_raw$db_org, db_raw$db_org$table)
-    #     result <- lapply(result, function(x) {
-    #         code_prefix <- switch(
-    #             x$table[1],
-    #             'analyses' = 'analysis_code',
-    #             paste0(gsub('s$', '', x$table[1]), '_code')
-    #         )
-    #         names(x)[3] <- code_prefix
-    #         keepCol <- which(sapply(x, function(col) !all(is.na(col))))
-    #         x[keepCol]
-    #     })
-    #     result$recording_intervals <- db_raw$db_rec_int
-    #     result$reference_codes <- db_raw$db_ref
-    #     result
-    # }),
-    # tar_target(db, {
-    #     if(isTRUE(use_local_database)) {
-    #         db_folder <- 'local_db'
-    #         result <- list()
-    #         result$deployments <- readRDS(file.path(db_folder, 'deployments.rds'))
-    #         result$sites <- readRDS(file.path(db_folder, 'sites.rds'))
-    #         result$devices <- readRDS(file.path(db_folder, 'devices.rds'))
-    #         result$projects <- readRDS(file.path(db_folder, 'projects.rds'))
-    #         result$recordings <- readRDS(file.path(db_folder, 'recordings.rds'))
-    #         result$recording_intervals <- readRDS(file.path(db_folder, 'recording_intervals.rds'))
-    #         result$recordings_devices <- readRDS(file.path(db_folder, 'recordings_devices.rds'))
-    #         return(result)
-    #     }
-    #     con <- try(DBI::dbConnect(
-    #         RPostgres::Postgres(),
-    #         host = secrets$makara_host,
-    #         port = secrets$makara_port,
-    #         dbname =secrets$makara_dbname,
-    #         user = secrets$makara_user,
-    #         password = secrets$makara_pw
-    #     ), silent=TRUE)
-    #     if(inherits(con, 'try-error')) {
-    #         stop('Could not connect to database to load new Makara data.')
-    #         # tar_cancel(TRUE)
-    #     }
-    #     on.exit(DBI::dbDisconnect(con))
-    #     sites <- DBI::dbGetQuery(con, 'select * from sites')
-    #     deployments <- DBI::dbGetQuery(con, 'select * from deployments')
-    #     recordings <- DBI::dbGetQuery(con, 'select * from recordings')
-    #     projects <- DBI::dbGetQuery(con, 'select * from projects')
-    #     devices <- DBI::dbGetQuery(con, 'select * from devices')
-    #     rec_dev <- DBI::dbGetQuery(con, 'select * from recordings_devices')
-    #     rec_int <- DBI::dbGetQuery(con, 'select * from recording_intervals')
-    #     analyses <- DBI::dbGetQuery(con, 'select * from analyses')
-    #     
-    #     list(
-    #         sites=sites,
-    #         deployments=deployments,
-    #         recordings=recordings,
-    #         projects=projects,
-    #         devices=devices,
-    #         recordings_devices=rec_dev,
-    #         recording_intervals=rec_int,
-    #         analyses=analyses
-    #     )
-    # }, cue=tar_cue(reload_database)),
-    
     # google qaqc ----
     tar_target(qaqc_google_raw, {
         sheetId <- as_id(secrets$google_qaqc_sheet)
@@ -253,23 +166,23 @@ list(
         select(result , all_of(keepCols))
     }),
     # smart sheets ----
-    tar_target(data_upload_raw, {
-        readPaDataSmart(secrets)
-    }, cue=tar_cue('always')),
-    tar_target(data_upload, {
-        # Only has instruemnt type or QAQC status we might care about
-        dataUpMap <- list(
-            'Project Name' = 'deployment_code',
-            'Instrument Type' = 'instrument_type',
-            'Status' = 'qaqc_status'
-        )
-        upCols <- c('deployment_code', 'qaqc_status', 'instrument_type')
-        myRenamer(data_upload_raw, map=dataUpMap) %>% 
-            select(all_of(upCols)) %>% 
-            filter(!is.na(deployment_code)) %>% 
-            mutate(instrument_type = toupper(instrument_type),
-                   recording_code = paste0(instrument_type, '_RECORDING'))
-    }),
+    # tar_target(data_upload_raw, {
+    #     readPaDataSmart(secrets)
+    # }, cue=tar_cue('always')),
+    # tar_target(data_upload, {
+    #     # Only has instruemnt type or QAQC status we might care about
+    #     dataUpMap <- list(
+    #         'Project Name' = 'deployment_code',
+    #         'Instrument Type' = 'instrument_type',
+    #         'Status' = 'qaqc_status'
+    #     )
+    #     upCols <- c('deployment_code', 'qaqc_status', 'instrument_type')
+    #     myRenamer(data_upload_raw, map=dataUpMap) %>% 
+    #         select(all_of(upCols)) %>% 
+    #         filter(!is.na(deployment_code)) %>% 
+    #         mutate(instrument_type = toupper(instrument_type),
+    #                recording_code = paste0(instrument_type, '_RECORDING'))
+    # }),
     # not currently used for anything
     tar_target(instrument_tracking_raw, {
         readInsTrackSmart(secrets)
@@ -282,9 +195,9 @@ list(
         result
     }, cue=tar_cue('always')),
     tar_target(st_deployment, {
-        dropIx <- which(st_deployment_raw$Status == 'Deployed' &
-                            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
-        dropIx <- c(dropIx, which(is.na(st_deployment_raw$Status)))
+        dropIx <- st_deployment_raw$Status == 'Deployed' &
+                            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01'
+        dropIx <- dropIx | is.na(st_deployment_raw$Status)
         st_deployment_map <- list(
             'Name' = 'deployment_code', #
             'Project' = 'project_code', #
@@ -324,7 +237,8 @@ list(
             'depth_comment',
             'recording_device_depth_m'
         )
-        deployment <- myRenamer(st_deployment_raw[-dropIx, ],
+        
+        deployment <- myRenamer(st_deployment_raw[!dropIx, ],
                                 map=st_deployment_map)
         # case if model name not given but ID is, assume tidbit
         tempIdOnly <- is.na(deployment$temp_model) & !is.na(deployment$temp_number)
@@ -396,7 +310,7 @@ list(
             'FPOD Depth Above Bottom (m)' = 'recording_device_depth_m'
         )
         # ONLY GET FPOD HERE
-        fpod <- myRenamer(st_deployment_raw[-dropIx, ],
+        fpod <- myRenamer(st_deployment_raw[!dropIx, ],
                           map=fpod_map)
         fpod$recording_device_depth_m <- as.numeric(fpod$recording_device_depth_m)
         fpod$deployment_water_depth_m <- as.numeric(fpod$deployment_water_depth_m)
@@ -414,9 +328,12 @@ list(
     }),
     # Temperature meta checks ----
     tar_target(temp_devices, {
-        dropIx <- which(st_deployment_raw$Status == 'Deployed' &
-                            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
-        dropIx <- c(dropIx, which(is.na(st_deployment_raw$Status)))
+        # dropIx <- which(st_deployment_raw$Status == 'Deployed' &
+        #                     st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
+        # dropIx <- c(dropIx, which(is.na(st_deployment_raw$Status)))
+        dropIx <- st_deployment_raw$Status == 'Deployed' &
+                            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01'
+        dropIx <- dropIx | is.na(st_deployment_raw$Status)
         st_deployment_map <- list(
             'Name' = 'deployment_code', #
             # 'Site ID' = 'site_code', #
@@ -431,7 +348,7 @@ list(
             'Sat. Tracker Serial Number' = 'satellite_number'
         )
         
-        deployment <- myRenamer(st_deployment_raw[-dropIx, ],
+        deployment <- myRenamer(st_deployment_raw[!dropIx, ],
                                 map=st_deployment_map)
         # case if model name not given but ID is, assume tidbit
         tempIdOnly <- is.na(deployment$temp_model) & !is.na(deployment$temp_number)
@@ -517,36 +434,64 @@ list(
             rename(st_deploy_time = deployment_datetime,
                    st_recovery_time = recovery_datetime)
         result <- qaqc_google
+        # manual dropping of some special PARKSAUS ones
+        dropParks <- c('PARKSAUSTRALIA_JURIEN_202201_JNE',
+                       'PARKSAUSTRALIA_JURIEN_202201_JSE')
+        dropIx <- result$deployment_code %in% dropParks &
+            is.na(result$pacm_db_status)
+        result <- result[!dropIx, ]
+        result$instrument_type <- constants$instrument_type
+        # result <- left_join(
+        #     result,
+        #     distinct(select(data_upload, deployment_code, instrument_type)),
+        #     by='deployment_code',
+        #     relationship='many-to-one')
+        result$recording_code <- paste0(result$instrument_type, '_RECORDING')
+        ###
+        multiDep <- names(which(table(result$deployment_code) > 1))
+        for(d in multiDep) {
+            ix <- which(result$deployment_code == d)
+            result$recording_code[ix] <- paste0(result$recording_code[ix], '_', seq_along(ix))
+        }
+        ###
         result$pacm_db_status[is.na(result$pacm_db_status)] <- 'NA'
-        result <- result %>% 
+        # result$pacm_db_status[
+        #     result$deployment_code == 'NEFSC_GOM_202412_USTR12' &
+        #         result$pacm_db_status == 'NA'] <- 'READY'
+        result <- result %>%
             filter(pacm_db_status %in% params$pacm_status_to_export)
         result$deployment_platform_type_code <- constants$platform
         if(length(params$skip_deployments) > 0) {
-            dropIx <- which(result$deployment_code %in% params$skip_deployments)
-            if(length(dropIx) > 0) {
-                warning('Removed data from ', length(dropIx), ' deployments', 
+            dropIx <- result$deployment_code %in% params$skip_deployments
+            if(any(dropIx)) {
+                warning('Removed data from ', sum(dropIx), ' deployments',
                         " in 'params$skip_deployments'")
             }
-            result <- result[-dropIx, ]
+            result <- result[!dropIx, ]
         }
         # result <- left_join(
         #     result,
-        #     distinct(select(data_upload, deployment_code, instrument_type, recording_code)),
+        #     distinct(select(data_upload, deployment_code, instrument_type)),
         #     by='deployment_code',
         #     relationship='many-to-one')
-        result$instrument_type <- constants$instrument_type
-        result$recording_code <- paste0(result$instrument_type, '_RECORDING')
+        
         # Googs do not have device ID unless in comment, here we fix
         # for cases where multiple recordings
         multiRecorderDep <- names(which(table(qaqc_google$deployment_code) > 1))
+        
+        # multiRecorderDep <- multiRecorderDep[!multiRecorderDep %in% dropParks]
         result$multiRecorder <- result$deployment_code %in% multiRecorderDep
+        notMultiDep <- character(0)
         result <- bind_rows(lapply(split(result, result$multiRecorder), function(x) {
             if(isTRUE(x$multiRecorder[1])) {
                 x$device_code <- NA
                 for(d in multiRecorderDep) {
                     depIds <- dep$device_code[dep$deployment_code == d]
                     thisG <- which(x$deployment_code == d)
-                    x$recording_code[thisG] <- paste0(x$recording_code[thisG], '_', seq_along(thisG))
+                    if(length(thisG) == 1) {
+                        notMultiDep <<- c(notMultiDep, d)
+                    }
+                    # x$recording_code[thisG] <- paste0(x$recording_code[thisG], '_', seq_along(thisG))
                     if(all(!is.na(x$st_serial_number[thisG]))) {
                         x$device_code[thisG] <- x$st_serial_number[thisG]
                         next
@@ -577,6 +522,7 @@ list(
                     relationship='one-to-one')
             }
             x$recording_device_codes <- paste0(x$instrument_type, '-', x$device_code)
+            x$recording_device_codes[is.na(x$device_code)] <- NA
             # if google had no deploy/recovery time, then use smartsheet time
             noDep <- x$deployment_datetime == '' | is.na(x$deployment_datetime)
             noRec <- x$recovery_datetime == '' | is.na(x$recovery_datetime)
@@ -584,17 +530,27 @@ list(
             x$recovery_datetime[noRec] <- x$st_recovery_time[noRec]
             x
         }))
+        
+        if(length(notMultiDep) > 0) {
+            warning('Expected multiple recorders but only found 1 entry for ',
+                    length(notMultiDep), ' deployment(s) (',
+                    printN(notMultiDep), ')')
+        }
         # print(table(result$organization_code))
         result <- addNefscProjectCode(result)
         result <- unite(result, 'recording_comments', c('recording_comments', 'depth_comment'), sep=';', na.rm=TRUE)
         dep_out <- select(result, any_of(c(names(templates$deployments), 'pacm_db_status', 'deployment_status')))
-        rec_out <- select(result, any_of(names(templates$recordings)))
-        multiRecorderDep <- names(which(table(rec_out$deployment_code) > 1))
+        # rec_out <- select(result, any_of(names(templates$recordings)))
+        rec_out <- result %>% 
+            filter(deployment_status %in% c('Recovered', 'No acoustic data (recorder lost or damaged)')) %>% 
+            select(any_of(names(templates$recordings)))
+        # multiRecorderDep <- names(which(table(rec_out$deployment_code) > 1))
+        
         # deployments with multiple recorders get 
         multiDrop <- numeric(0)
         for(d in multiRecorderDep) {
             thisIx <- which(dep_out$deployment_code == d)
-            if(length(thisIx) == 1) {
+            if(length(thisIx) <= 1) {
                 next
             }
             sumNa <- apply(sapply(dep_out[thisIx, ], is.na), 1, sum)
@@ -708,30 +664,7 @@ list(
                               .default = recording_timezone
                           )
         )
-                              
-        # dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- 40.8622
-        # dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202309_NS03'] <- -70.324329
-        # 
-        # dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- 41.352254
-        # dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01'] <- -70.324329
-        # 
-        # dep_out$deployment_latitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- 41.352254
-        # dep_out$deployment_longitude[dep_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01'] <- -70.324329
-        # 
-        # dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- -31.71245
-        # dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 115.61445
-        # 
-        # dep_out$deployment_latitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- -30.869070
-        # dep_out$deployment_longitude[dep_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES'] <- 156.299920
         
-        # rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202309_NS03' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-7414'
-        # rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202311_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-1677778970'
-        # rec_out$recording_device_codes[rec_out$deployment_code == 'NEFSC_MA-RI_202411_MUSK01' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-8924'
-        # rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5458'
-        # rec_out$recording_device_codes[rec_out$deployment_code == 'PARKSAUSTRALIA_CEMP_202404_CES' & rec_out$recording_device_codes == 'SOUNDTRAP-NA'] <- 'SOUNDTRAP-5473'
-        # 
-        # rec_out$recording_timezone[rec_out$deployment_code == 'NEFSC_MA-RI_202402_PWN04' & rec_out$recording_code == 'SOUNDTRAP_RECORDING'] <- NA
-        # rec_out$recording_timezone[rec_out$deployment_code == 'PARKSAUSTRALIA_TWOROCKS_202211_TRE'] <- 'UTC'
         out <- list(deployments=dep_out,
                     recordings=rec_out)
         rec_int_out <- formatRecordingIntervals(rec_int_out)
@@ -748,8 +681,10 @@ list(
                                 templates=templates,
                                 # mandatory=mandatory_fields,
                                 ncei=FALSE,
-                                dropEmpty = TRUE)
+                                dropEmpty = TRUE,
+                                dropExtra=!params$keep_extra_columns)
         out <- checkDbValues(out, db)
+        out <- checkDbReplacements(out, db, replaceWithNA = params$replace_db_with_na)
         checkWarnings(out)
         out
     }),
@@ -799,5 +734,9 @@ list(
 # check that outputs are not duplicated. In the temperature devices testing you
 # end up with satellite and such device codes with no number - incorrect
 
+# Keep checking but found problem - will fix with kates and added warnings
 
-# NEW DEVICE TYPES FOR SPECIFIC RECORDING DEVICES GO AND FIX THAT BEFORE SUBMITO
+# Work on FPOD checkos update from server and make more notes on process for gettting
+#that new data
+
+# google must have st serial filled in for multi-deps in order to match anything

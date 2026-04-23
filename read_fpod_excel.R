@@ -1,7 +1,8 @@
 # fpod fixo
 fpodPath <- '../Data/MakBal/fpod'
 fpodFiles <- file.path(fpodPath, 
-                       c('SBMNS_Metadata.xlsx', 'Metadata.xlsx'))
+                       # c('SBMNS_Metadata.xlsx', 'Metadata.xlsx'))
+                       c('Metadata.xlsx'))
 # xlFiles <- list.files('../Data/MakBal/fpod/', pattern='xl', full.names=TRUE)
 library(readxl)
 library(lubridate)
@@ -16,7 +17,9 @@ readOneFpodMeta <- function(x) {
         return(oneFpodSheet(x, sheet=goodSheet))
     }
     bind_rows(lapply(sheets, function(s) {
-        oneFpodSheet(x, sheet=s)
+        res <- oneFpodSheet(x, sheet=s)
+        cat('Read', length(res[[1]]), 'rows from sheet', s, '\n')
+        res
     }))
 }   
 
@@ -24,11 +27,16 @@ oneFpodSheet <- function(x, sheet) {
     data <- read_excel(x, sheet=sheet, col_types = 'list')
     start <- data[['Cleaned Data Start']]
     end <- data[['Cleaned Data End']]
-    if(is.numeric(data[[1]][2])) {
-        nameCol <- 1
-    } else {
-        nameCol <- 2
-    }
+    # if(data[[1]][1] == 'Deployment') {
+    #     nameCol <- 1
+    # } else if(data[[2]][1] == 'Deployment') {
+    #     nameCol <- 2
+    # } else if(is.numeric(data[[1]][2])) {
+    #     nameCol <- 1
+    # } else {
+    #     nameCol <- 2
+    # }
+    nameCol <- which(names(data) == 'Deployment')
     deployment <- unlist(data[[nameCol]])
     keepIx <- grepl('NEFSC', deployment)
     start <- fixJankTime(start)

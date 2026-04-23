@@ -236,7 +236,8 @@ addNefscProjectCode <- function(x) {
                     project_code == 'NEFSC_MA-RI_MUSK' ~ 'NEFSC_MA-RI_SEAL',
                     project_code == 'NEFSC_MA-RI_MONO' ~ 'NEFSC_MA-RI_SEAL',
                     project_code == 'PMEL_SBNMS' ~ 'PMEL_SBNMS-NRS',
-                    .default=NA
+                    project_code == 'PMEL_NE-OFFSHORE' ~ 'PMEL_NE-OFFSHORE-NRS',
+                    .default=project_code
                 )
     )
     tncOrg <- x$organization_code == 'TNC'
@@ -244,12 +245,12 @@ addNefscProjectCode <- function(x) {
     otherOrgNA <- !x$organization_code %in% c('NEFSC', 'TNC') &
         is.na(x$project_code)
     # skip doing this, was making it harder to track down problems
-    projPattern <- '^([A-Z]*_[A-Z]*_[0-9]*).*'
-    for(i in which(otherOrgNA)) {
-        if(grepl(projPattern, x$deployment_code[i])) {
-            # x$project_code[i] <- gsub(projPattern, '\\1', x$deployment_code[i])
-        }
-    }
+    # projPattern <- '^([A-Z]*_[A-Z]*_[0-9]*).*'
+    # for(i in which(otherOrgNA)) {
+    #     if(grepl(projPattern, x$deployment_code[i])) {
+    #         # x$project_code[i] <- gsub(projPattern, '\\1', x$deployment_code[i])
+    #     }
+    # }
     pauOrg <- x$organization_code == 'PARKSAU'
     x$project_code[pauOrg] <- gsub('_[0-9]*$', '', x$project_code[pauOrg])
     x
@@ -294,5 +295,24 @@ formatRecordingIntervals <- function(x) {
         unnest(cols=c('compromised_starts', 'compromised_ends')) %>% 
         rename(recording_interval_start_datetime=compromised_starts,
                recording_interval_end_datetime=compromised_ends)
+    x
+}
+
+fixNaPacmStatus <- function(x) {
+    naStatus <- is.na(x$pacm_db_status)
+    naDeps <- x$deployment_code[naStatus]
+    
+    for(i in which(naStatus)) {
+        dep <- x$deployment_code[i]
+        allStatus <- x$pacm_db_status[x$deployment_code == dep]
+        allStatus <- allStatus[!is.na(allStatus)]
+        if(length(allStatus) == 0) {
+            next
+        }
+        if(length(allStatus) > 1) {
+            warning('Deployment ', dep, ' had multiple PACM_DB_STATUS categories')
+        }
+        x$pacm_db_status[i] <- allStatus
+    }
     x
 }
