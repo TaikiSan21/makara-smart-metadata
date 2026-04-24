@@ -101,7 +101,7 @@ list(
     }),
     # google qaqc ----
     tar_target(qaqc_google_raw, {
-        sheetId <- as_id(secrets$google_qaqc_sheet)
+        sheetId <- as_id('1lN1mxXJZpOgKppjYn43f5qxO00vuDHoQsy8uq-G6fDs')
         qaqc_file <- tempfile(fileext = '.xlsx')
         drive_download(file = sheetId, path=qaqc_file, overwrite = TRUE)
         sheetNames <- excel_sheets(qaqc_file)
