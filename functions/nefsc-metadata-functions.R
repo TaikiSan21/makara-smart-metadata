@@ -1,11 +1,11 @@
 # Project-Specific ----
 # Packages httr, rjson, dplyr
 
-readPaDataSmart <- function(secrets=NULL, token, id) {
+readPaDataSmart <- function(secrets=NULL, token, id='212707250071436') {
     if(!is.null(secrets)) {
         secrets <- readSmartSecrets(secrets)
         token <- secrets$smart_key
-        id <- secrets$pa_data_id
+        # id <- secrets$pa_data_id
     }
     header <- add_headers(Authorization = paste0('Bearer ', token))
     base <- 'https://api.smartsheetgov.com/2.0/sheets'
@@ -84,11 +84,11 @@ smartToDf <- function(x) {
     result
 }
 
-readInsTrackSmart <- function(secrets=NULL, token, id) {
+readInsTrackSmart <- function(secrets=NULL, token, id='2939021493069708') {
     if(!is.null(secrets)) {
         secrets <- readSmartSecrets(secrets)
         token <- secrets$smart_key
-        id <- secrets$ins_track_id
+        # id <- secrets$ins_track_id
     }
     header <- add_headers(Authorization = paste0('Bearer ', token))
     base <- 'https://api.smartsheetgov.com/2.0/sheets'
@@ -104,11 +104,11 @@ readInsTrackSmart <- function(secrets=NULL, token, id) {
     data.frame(distinct(recorder))
 }
 
-readStDeploymentSmart <- function(secrets=NULL, token, id) {
+readStDeploymentSmart <- function(secrets=NULL, token, id='8633482340525964') {
     if(!is.null(secrets)) {
         secrets <- readSmartSecrets(secrets)
         token <- secrets$smart_key
-        id <- secrets$st_deployment_id
+        # id <- secrets$st_deployment_id
     }
     header <- add_headers(Authorization = paste0('Bearer ', token))
     base <- 'https://api.smartsheetgov.com/2.0/sheets'
@@ -315,4 +315,24 @@ fixNaPacmStatus <- function(x) {
         x$pacm_db_status[i] <- allStatus
     }
     x
+}
+
+makeCloudSecrets <- function() {
+    smartSec <- tryCatch(
+        system('gcloud secrets versions access latest --secret="taiki-api-key"', intern=TRUE), 
+        warning = function(w) {
+            warning('Could not access API key - ask Taiki for HELP! Warning-', w$message, call. = FALSE)
+            return(NULL)
+        },
+        error = function(e) {
+            warning('Could not access API key - ask Taiki for HELP! Error-', e$message, call.=FALSE)
+            return(NULL)
+        })
+    list(
+        smart_key = smartSec,
+        pa_data_id = '212707250071436',
+        ins_track_id = '2939021493069708',
+        st_deployment_id = '8633482340525964',
+        rt_tracking_id = '3627925053433740'
+    )
 }

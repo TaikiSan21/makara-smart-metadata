@@ -87,7 +87,11 @@ list(
     # secrets has DB passwords, smartsheets key and IDs
     tar_target(secrets_file, '.secrets/secrets.yml'),
     tar_target(secrets, {
-        read_yaml(secrets_file)
+        if(file.exists(secrets_file)) {
+            read_yaml(secrets_file)
+        } else {
+            makeCloudSecrets()
+        }
     }),
     tar_target(db_raw, {
         downloadBqMakara()
