@@ -7,6 +7,7 @@ if(!require('renv', quietly = TRUE)) {
 renv::restore()
 
 # Should only have to run this once - we need Google credentials for download
+gargle::cred_funs_add(credentials_gce = NULL)
 googledrive::drive_auth()
 bigrquery::bq_auth()
 

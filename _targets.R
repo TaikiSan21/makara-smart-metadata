@@ -103,6 +103,7 @@ list(
     tar_target(qaqc_google_raw, {
         sheetId <- as_id('1lN1mxXJZpOgKppjYn43f5qxO00vuDHoQsy8uq-G6fDs')
         qaqc_file <- tempfile(fileext = '.xlsx')
+        gargle::cred_funs_add(credentials_gce = NULL)# force email auth not GCE
         drive_download(file = sheetId, path=qaqc_file, overwrite = TRUE)
         sheetNames <- excel_sheets(qaqc_file)
         result <- lapply(sheetNames, function(x) {
