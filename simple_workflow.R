@@ -16,6 +16,3 @@ bigrquery::bq_auth()
 targets::tar_make()
 
 # Look at outputs/warnings.csv, fix issues then run until you are happy!
-
-
-# options you can change are at top of _targets.R file

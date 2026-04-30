@@ -1,12 +1,4 @@
-# Created by use_targets().
-# Follow the comments below to fill in this target script.
-# Then follow the manual to check and run the pipeline:
-#   https://books.ropensci.org/targets/walkthrough.html#inspect-the-pipeline
-
-# Load packages required to define the pipeline:
 library(targets)
-# library(tarchetypes) # Load other packages as needed.
-
 # Set target options:
 tar_option_set(
     packages = c("dplyr", 'rjson', 'lubridate', 'httr', 
@@ -25,14 +17,19 @@ tar_option_set(
 tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
-# Can be set to "always" or "thorough"
-reload_database <- 'thorough'
-use_local_database <- FALSE
+# Set TRUE to force re-loading BigQuery database
+reload_database <- FALSE
 
-# don't change this
+### dont change below ###
 if(!tar_exist_objects('db_raw')) {
-    reload_database <- 'always'
+    reload_database <- TRUE
 }
+if(isTRUE(reload_database)) {
+    reload_database <- 'always'
+} else if(isFALSE(reload_database)) {
+    reload_database <- 'thorough'
+}
+####
 
 list(
     # parameters ----
@@ -43,16 +40,16 @@ list(
             'pacm_status_to_export' = c('READY'),
             # 'pacm_status_to_export' = c('READY', 'NA'),
             # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED'),
-            # Whether or not to export data already present in DB TRUE/FALSE
-            'export_already_in_db' = TRUE,
-            # Allow replacing non-NA databse values with NA - almost always FALSE
-            'replace_db_with_na' = FALSE,
-            # keep extra columns with output - for testing
-            'keep_extra_columns' = TRUE,
             # identify specific deployments to skip, if wanted
             'skip_deployments' = c('NEFSC_TEMP-EXP_202503_AVAST_ST7393',
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8024',
-                                   'NEFSC_TEMP-EXP_202503_AVAST_ST8546') #c('PARKSAUSTRALIA_CEMP_202404_CES')
+                                   'NEFSC_TEMP-EXP_202503_AVAST_ST8546'),
+            # Whether or not to export data already present in DB TRUE/FALSE
+            'export_already_in_db' = TRUE,
+            # Allow replacing non-NA database values with NA - almost always FALSE
+            'replace_db_with_na' = FALSE,
+            # keep extra columns with output - for testing
+            'keep_extra_columns' = FALSE
         )
     }),
     # constants ----
@@ -61,7 +58,7 @@ list(
         list(
             'platform' = 'BOTTOM_MOUNTED_MOORING',
             'fpod_duration' = 3600,
-            'fpod_interval' = 0,
+            'fpod_interval' = 3600,
             'fpod_sr' = 1000,
             'fpod_nchannels' = 1,
             'fpod_bits' = 10,
@@ -221,7 +218,8 @@ list(
             'Temp. Logger Model' = 'temp_model',
             'Temp. Logger ID #:' = 'temp_number',
             'Sat. Tracker Model?' = 'satellite_model',
-            'Sat. Tracker Serial Number' = 'satellite_number'
+            'Sat. Tracker Serial Number' = 'satellite_number',
+            'Recording URI' = 'recording_uri'
         )
         depCols <- c(
             # 'organization_code',
@@ -240,7 +238,8 @@ list(
             'recovery_datetime',
             'deployment_status',
             'depth_comment',
-            'recording_device_depth_m'
+            'recording_device_depth_m',
+            'recording_uri'
         )
         
         deployment <- myRenamer(st_deployment_raw[!dropIx, ],
