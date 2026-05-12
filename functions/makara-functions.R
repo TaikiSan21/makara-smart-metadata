@@ -663,7 +663,8 @@ downloadBqMakara <- function(project='ggn-nmfs-pacm-dev-1', dataset='makara') {
                      'recordings', 
                      'analyses', 
                      'recording_intervals',
-                     'tracks')
+                     'tracks',
+                     'sensor_datasets')
     full_df <- vector('list', length=length(full_tables))
     names(full_df) <- full_tables
     for(i in seq_along(full_df)) {
