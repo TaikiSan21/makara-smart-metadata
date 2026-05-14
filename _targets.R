@@ -396,14 +396,13 @@ list(
             mutate(device_code = strsplit(deployment_device_codes, ',')) %>% 
             unnest(device_code) %>% 
             distinct() %>%
-            select(deployment_code, device_code)
+            select(deployment_code, device_code) %>% 
+            mutate(type=gsub('^([A-Z_]*)-.*', '\\1', device_code))
         db_devices <- db$deployments[c('deployment_code', 'deployment_device_codes')] %>% 
             mutate(device_code=strsplit(deployment_device_codes,',')) %>% 
             unnest(device_code) %>% 
             select(-deployment_device_codes) %>% 
             mutate(type=gsub('^([A-Z_]*)-.*', '\\1', device_code))
-        db_devices$type[db_devices$type == 'TIDBIT'] <- 'HOBO'
-        db_devices$type[grepl('CTD', db_devices$device_code)] <- 'CTD'
         temp_devices <- doJoinCheck(temp_devices,
                                     db_devices,
                                     by=c('deployment_code', 'device_code'),
@@ -415,19 +414,46 @@ list(
         all_devices <- bind_rows(db_devices,
                                  select(filter(temp_devices, new), -new)
         )
+        all_devices$type[all_devices$type == 'TIDBIT'] <- 'HOBO'
+        all_devices$type[grepl('CTD', all_devices$device_code)] <- 'CTD'
         all_devices
     }),
     # Temp files ----
     tar_target(temp_directory, 'Z:/ANCILLARY_DATA/TEMPERATURE_DATA/'),
     tar_target(temp_files, {
         if(!dir.exists(temp_directory)) {
-            warning('Temperature directory ', temp_dir, ' does not exist')
+            warning('Temperature directory ', temp_directory, ' does not exist')
             return(NULL)
         }
         files <- list.files(temp_directory, recursive=TRUE, full.names=TRUE, pattern='csv$')
         files
     }, cue=tar_cue('always')),
-    
+    tar_target(temp_df, {
+        if(is.null(temp_files)) {
+            return(NULL)
+        }
+        deps <- basename(dirname(temp_files))
+        ix <- grep('temperature', deps, ignore.case=T)
+        deps[ix] <- basename(dirname(dirname(temp_files[ix])))
+        library(dplyr)
+        library(targets)
+        
+        filedf <- data.frame(deployment_code = deps,
+                             full=temp_files,
+                             file = basename(temp_files)) %>% 
+            mutate(
+                filtered=grepl('Filtered', file),
+                deployment_code = gsub('MOUNTDESERTROCK', 'MDR', deployment_code),
+                type = case_when(
+                    grepl('_ST_', file) ~ 'SOUNDTRAP',
+                    grepl('_FPOD_', file) ~ 'FPOD',
+                    grepl('_VEMCO_', file) ~ 'VEMCO',
+                    grepl('^VR2AR', file) ~ 'VEMCO',
+                    grepl('_HOBO_', file) ~ 'HOBO',
+                    grepl('_CTD_', file) ~ 'CTD',
+                    .default=NA
+                ))
+    }),
     # FPOD ----
     tar_target(fpod_times, {
         fpodFile <- 'FPOD_Dates.csv'
