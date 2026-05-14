@@ -330,7 +330,7 @@ list(
         result <- list(deployments=deployment, fpod=fpod)
         result
     }),
-    # Temperature meta checks ----
+    # Temp devices ----
     tar_target(temp_devices, {
         # dropIx <- which(st_deployment_raw$Status == 'Deployed' &
         #                     st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
@@ -391,31 +391,43 @@ list(
                             c('recording_device', 'temp_code', 'release_code', 'satellite_code', 'fpod_device'),
                             na.rm=TRUE, sep=',')
         deployment <- deployment[c('deployment_code', 'deployment_device_codes')]
-        # some deploy are here twice bc two STs, combine and distinct
-        # multiRecorderDep <- names(which(table(deployment$deployment_code) > 1))
-        # # deployments with multiple recorders get 
-        # multiDrop <- numeric(0)
-        # for(d in multiRecorderDep) {
-        #     thisIx <- which(deployment$deployment_code == d)
-        #     if(length(thisIx) == 1) {
-        #         next
-        #     }
-        #     sumNa <- apply(sapply(deployment[thisIx, ], is.na), 1, sum)
-        #     # either take the row with least NA vals, or if tied the first
-        #     inNa <- thisIx[which(sumNa == min(sumNa))[1]]
-        #     multiDrop <- c(multiDrop, thisIx[thisIx != inNa])
-        # }
-        # if(length(multiDrop) > 0) {
-        #     deployment <- deployment[-multiDrop, ]
-        # }
-        deployment %>% 
+
+        temp_devices <- deployment %>% 
             mutate(device_code = strsplit(deployment_device_codes, ',')) %>% 
             unnest(device_code) %>% 
             distinct() %>%
             select(deployment_code, device_code)
-        # summarise(deployment_device_codes=paste0(deployment_device_codes, collapse=','),
-        #           .by=deployment_code)
+        db_devices <- db$deployments[c('deployment_code', 'deployment_device_codes')] %>% 
+            mutate(device_code=strsplit(deployment_device_codes,',')) %>% 
+            unnest(device_code) %>% 
+            select(-deployment_device_codes) %>% 
+            mutate(type=gsub('^([A-Z_]*)-.*', '\\1', device_code))
+        db_devices$type[db_devices$type == 'TIDBIT'] <- 'HOBO'
+        db_devices$type[grepl('CTD', db_devices$device_code)] <- 'CTD'
+        temp_devices <- doJoinCheck(temp_devices,
+                                    db_devices,
+                                    by=c('deployment_code', 'device_code'),
+                                    verbose=FALSE)
+        db_devices$source <- 'makara'
+        temp_devices$source <- 'smartsheets'
+        dropDeps <- paste0('NEFSC_GOM_', c('202105', '202012', '202103'), '_PETITMANAN')
+        temp_devices <- filter(temp_devices, !deployment_code %in% dropDeps)
+        all_devices <- bind_rows(db_devices,
+                                 select(filter(temp_devices, new), -new)
+        )
+        all_devices
     }),
+    # Temp files ----
+    tar_target(temp_directory, 'Z:/ANCILLARY_DATA/TEMPERATURE_DATA/'),
+    tar_target(temp_files, {
+        if(!dir.exists(temp_directory)) {
+            warning('Temperature directory ', temp_dir, ' does not exist')
+            return(NULL)
+        }
+        files <- list.files(tempDir, recursive=TRUE, full.names=TRUE, pattern='csv$')
+        files
+    }, cue=tar_cue('always')),
+    
     # FPOD ----
     tar_target(fpod_times, {
         fpodFile <- 'FPOD_Dates.csv'
@@ -710,19 +722,11 @@ list(
 ## frange is 20kHz - 220kHz
 
 # TODO 
-# checking for previously lost updates
-# Update dbValueChecker to see if x$devices x$projects whatever exists too
-# alreadyDbChecker should probably check more/all inputs. Can I make a helper
-# so that that isnt tedious...
 
 # are we going to have non-soundstrap data to run? Currently only place to get instrument
 # is from PA Data Upload sheet, but this will not have entries for deployments that
 # are lost. So, currently a problem where lost deployments do not get a recorder
 # type (soundtrap,haru) - yes but not now
-
-# MARI202402 PWN04 and SBNMS 202312 SB03 are UNUSABLE but causing warnings for missing
-# currently only affecting the fpod data for these deployments if removing
-# stuff already in DB
 
 # Will recording_channel ever not be 1? - yes but not now
 
@@ -732,15 +736,3 @@ list(
 # PARKSAUSTRALIA_CEMP_202404_CES is not in Smart
 
 # All AVASTs are in ??? status
-
-# MAYBE A PROBLEM - Double check how metadata is working out for deployments that
-# have two Soundtraps - these get double entries in the smort shorts so double
-# check that outputs are not duplicated. In the temperature devices testing you
-# end up with satellite and such device codes with no number - incorrect
-
-# Keep checking but found problem - will fix with kates and added warnings
-
-# Work on FPOD checkos update from server and make more notes on process for gettting
-#that new data
-
-# google must have st serial filled in for multi-deps in order to match anything
