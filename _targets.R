@@ -424,7 +424,7 @@ list(
             warning('Temperature directory ', temp_dir, ' does not exist')
             return(NULL)
         }
-        files <- list.files(tempDir, recursive=TRUE, full.names=TRUE, pattern='csv$')
+        files <- list.files(temp_directory, recursive=TRUE, full.names=TRUE, pattern='csv$')
         files
     }, cue=tar_cue('always')),
     
