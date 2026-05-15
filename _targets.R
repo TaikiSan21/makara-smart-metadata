@@ -198,7 +198,7 @@ list(
     }, cue=tar_cue('always')),
     tar_target(st_deployment, {
         dropIx <- st_deployment_raw$Status == 'Deployed' &
-                            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01'
+            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01'
         dropIx <- dropIx | is.na(st_deployment_raw$Status)
         st_deployment_map <- list(
             'Name' = 'deployment_code', #
@@ -336,7 +336,7 @@ list(
         #                     st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
         # dropIx <- c(dropIx, which(is.na(st_deployment_raw$Status)))
         dropIx <- st_deployment_raw$Status == 'Deployed' &
-                            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01'
+            st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01'
         dropIx <- dropIx | is.na(st_deployment_raw$Status)
         st_deployment_map <- list(
             'Name' = 'deployment_code', #
@@ -391,7 +391,7 @@ list(
                             c('recording_device', 'temp_code', 'release_code', 'satellite_code', 'fpod_device'),
                             na.rm=TRUE, sep=',')
         deployment <- deployment[c('deployment_code', 'deployment_device_codes')]
-
+        
         temp_devices <- deployment %>% 
             mutate(device_code = strsplit(deployment_device_codes, ',')) %>% 
             unnest(device_code) %>% 
@@ -475,30 +475,96 @@ list(
             return(NULL)
         }
         # add device_codes to temp data
-        result <- filter(temp_df, filtered)
+        # result <- filter(temp_df, filtered)
+        # result <- bind_rows(lapply(split(result, list(result$deployment_code, result$type)), function(x) {
+        #     if(nrow(x) == 0) {
+        #         return(NULL)
+        #     }
+        #     thisDep <- x$deployment_code[1]
+        #     thisType <- x$type[1]
+        #     if(thisDep == 'NEFSC_SBNMS_202207_SB04' &&
+        #        thisType == 'SOUNDTRAP') {
+        #         x$device_code <- 'SOUNDTRAP-671666216'
+        #         return(x)
+        #     }
+        #     thisMatch <- filter(temp_devices, 
+        #                         deployment_code == thisDep,
+        #                         type == thisType)
+        #     
+        #     if(thisType == 'HOBO' &&
+        #        nrow(thisMatch) == 0) {
+        #         checkGeneric <- filter(temp_devices,
+        #                                deployment_code == thisDep,
+        #                                device_code == 'TEMPERATURE_SENSOR-GENERIC')
+        #         if(nrow(checkGeneric) == 1) {
+        #             x$warning <- 'TIDBIT listed in DB as TEMPERATURE_SENSOR-GENERIC'
+        #             x$device_code <- 'TEMPERATURE_SENSOR-GENERIC'
+        #             return(x)
+        #         }
+        #     }
+        #     if(nrow(x) != nrow(thisMatch)) {
+        #         # msg <- paste0('Deployment ', thisDep, ' type ', thisType, 
+        #         # ' has ', nrow(x), ' files and ', nrow(thisMatch), ' devices\n', sep='')
+        #         if(nrow(thisMatch) != 0) {
+        #             msg <- paste0(nrow(x), ' files and ', nrow(thisMatch), ' devices:',
+        #                           paste0(thisMatch$device_code, collapse=','),
+        #                           '(',paste0(thisMatch$source, collapse=','),')')
+        #         } else {
+        #             msg <- paste0(nrow(x), ' files and ', nrow(thisMatch), ' devices')
+        #         }
+        #         x$warning <- msg
+        #     } else {
+        #         x$device_code <- thisMatch$device_code
+        #         if(nrow(x) != 1) {
+        #             x$warning <- 'Multiple devices not actually matched yet'
+        #             x$device_code <- paste0(x$device_code, '(', thisMatch$source, ')')
+        #             ids <- gsub('SOUNDTRAP-', '', thisMatch$device_code)
+        #             ids <- gsub('^HF_4_', '', ids)
+        #             ids <- gsub('^STD5_', '', ids)
+        #             ids <- gsub('_2018$', '', ids)
+        #             for(i in seq_along(ids)) {
+        #                 matchIx <- which(grepl(ids[i], x$file))
+        #                 if(length(matchIx) == 1) {
+        #                     x$device_code[matchIx] <- thisMatch$device_code[i]
+        #                     x$warning[matchIx] <- NA
+        #                 }
+        #             }
+        #             
+        #         }
+        #         x
+        #     }
+        #     x
+        # }))
+        #### new ----
+        result <- temp_devices
+        result <- filter(result, 
+                         deployment_code %in% st_deployment$deployments$deployment_code,
+                         type %in% c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO'))
+
+        filt_temp <- filter(temp_df, filtered)
         result <- bind_rows(lapply(split(result, list(result$deployment_code, result$type)), function(x) {
             if(nrow(x) == 0) {
                 return(NULL)
             }
             thisDep <- x$deployment_code[1]
             thisType <- x$type[1]
+            thisMatch <- filter(filt_temp, 
+                                deployment_code == thisDep,
+                                type == thisType)
+            
             if(thisDep == 'NEFSC_SBNMS_202207_SB04' &&
                thisType == 'SOUNDTRAP') {
-                x$device_code <- 'SOUNDTRAP-671666216'
+                x$full <- grep('671666216', thisMatch$full, value=TRUE)
                 return(x)
             }
-            thisMatch <- filter(temp_devices, 
-                                       deployment_code == thisDep,
-                                       type == thisType)
-            
-            if(thisType == 'HOBO' &&
+            if(thisType == 'TEMPERATURE_SENSOR' &&
                nrow(thisMatch) == 0) {
-                checkGeneric <- filter(temp_devices,
-                                              deployment_code == thisDep,
-                                              device_code == 'TEMPERATURE_SENSOR-GENERIC')
+                checkGeneric <- filter(filt_temp,
+                                       deployment_code == thisDep,
+                                       type == 'HOBO')
                 if(nrow(checkGeneric) == 1) {
                     x$warning <- 'TIDBIT listed in DB as TEMPERATURE_SENSOR-GENERIC'
-                    x$device_code <- 'TEMPERATURE_SENSOR-GENERIC'
+                    x$full <- checkGeneric$full
                     return(x)
                 }
             }
@@ -506,27 +572,27 @@ list(
                 # msg <- paste0('Deployment ', thisDep, ' type ', thisType, 
                 # ' has ', nrow(x), ' files and ', nrow(thisMatch), ' devices\n', sep='')
                 if(nrow(thisMatch) != 0) {
-                    msg <- paste0(nrow(x), ' files and ', nrow(thisMatch), ' devices:',
-                                  paste0(thisMatch$device_code, collapse=','),
-                                  '(',paste0(thisMatch$source, collapse=','),')')
+                    msg <- paste0(nrow(thisMatch), ' files and ', nrow(x), ' devices:',
+                                  paste0(x$device_code, collapse=','),
+                                  '(',paste0(x$source, collapse=','),')')
                 } else {
                     msg <- paste0(nrow(x), ' files and ', nrow(thisMatch), ' devices')
                 }
                 x$warning <- msg
             } else {
-                x$device_code <- thisMatch$device_code
+                x$full <- thisMatch$full
                 if(nrow(x) != 1) {
                     x$warning <- 'Multiple devices not actually matched yet'
-                    x$device_code <- paste0(x$device_code, '(', thisMatch$source, ')')
-                    ids <- gsub('SOUNDTRAP-', '', thisMatch$device_code)
+                    # x$device_code <- paste0(x$device_code, '(', thisMatch$source, ')')
+                    ids <- gsub('SOUNDTRAP-', '', x$device_code)
                     ids <- gsub('^HF_4_', '', ids)
                     ids <- gsub('^STD5_', '', ids)
                     ids <- gsub('_2018$', '', ids)
                     for(i in seq_along(ids)) {
-                        matchIx <- which(grepl(ids[i], x$file))
+                        matchIx <- which(grepl(ids[i], full$file))
                         if(length(matchIx) == 1) {
-                            x$device_code[matchIx] <- thisMatch$device_code[i]
-                            x$warning[matchIx] <- NA
+                            x$full[i] <- thisMatch$full[matchIx]
+                            x$warning[i] <- NA
                         }
                     }
                     
@@ -535,15 +601,19 @@ list(
             }
             x
         }))
+        
+        # endnew----
+        noDevice <- is.na(result$device_code)
+        
         result <- select(result,
-                     'deployment_code',
-                     'sensor_dataset_device_code' = 'device_code',
-                     'type',
-                     'warning',
-                     'filename' = 'full') %>% 
+                         'deployment_code',
+                         'sensor_dataset_device_code' = 'device_code',
+                         'type',
+                         'warning',
+                         'filename' = 'full') %>% 
             mutate(sensor_dataset_comments = NA,
                    sensor_dataset_variable_code = 'TEMP_C',
-                   organization_code = gsub('^([A-Z]*)_.*', '\\1', deployment_code),
+                   organization_code = deployCodeToOrg(deployment_code),
                    sensor_dataset_code = paste0('TEMP_DATA_', type))
         result <- bind_rows(lapply(split(result, list(result$deployment_code, result$sensor_dataset_code)), function(x) {
             if(nrow(x) <= 1) {
