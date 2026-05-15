@@ -475,14 +475,15 @@ checkDbValues <- function(x, db) {
 
 # Checks if deployments, recordings, and recording_intervals
 # are already in makara 
+joinRequirements <- list(
+    'deployments' = c('organization_code', 'deployment_code'),
+    'recordings' = c('organization_code', 'deployment_code', 'recording_code'),
+    'recording_intervals' = c('deployment_code', 'recording_code', 'recording_interval_start_datetime'),
+    'analyses' = c('deployment_organization_code', 'deployment_code', 'analysis_code'),
+    'tracks' = c('organization_code', 'deployment_code', 'track_code'),
+    'sensor_datasets' = c('organization_code', 'deployment_code', 'sensor_dataset_code')
+)
 checkAlreadyDb <- function(x, db) {
-    joinRequirements <- list(
-        'deployments' = c('organization_code', 'deployment_code'),
-        'recordings' = c('organization_code', 'deployment_code', 'recording_code'),
-        'recording_intervals' = c('deployment_code', 'recording_code', 'recording_interval_start_datetime'),
-        'analyses' = c('deployment_organization_code', 'deployment_code', 'analysis_code'),
-        'tracks' = c('organization_code', 'deployment_code', 'track_code')
-    )
     # tables to not check against
     noCheck <- c('detections', 'sensor_values', 'track_positions')
     for(j in names(x)) {
@@ -777,14 +778,6 @@ formatBqMakara <- function(db_raw) {
 }
 
 checkDbReplacements <- function(x, db, replaceWithNA=FALSE) {
-    joinRequirements <- list(
-        'deployments' = c('organization_code', 'deployment_code'),
-        'recordings' = c('organization_code', 'deployment_code', 'recording_code'),
-        'recording_intervals' = c('deployment_code', 'recording_code', 'recording_interval_start_datetime'),
-        'analyses' = c('deployment_organization_code', 'deployment_code', 'analysis_code'),
-        'tracks' = c('organization_code', 'deployment_code', 'track_code'),
-        'sensor_datasets' = c('organization_code', 'deployment_code', 'sensor_dataset_code')
-    )
     warns <- vector('list', length=0)
     if(all(c('deployments', 'recordings') %in% names(x))) {
         x$deployments <- combineDeviceCodes(x$deployments, x$recordings)
