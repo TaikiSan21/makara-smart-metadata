@@ -336,3 +336,47 @@ makeCloudSecrets <- function() {
         rt_tracking_id = '3627925053433740'
     )
 }
+
+# sd is sensor dataset with filename and type column
+# special cases:
+# FPOD - hourly average and GSURI
+# Soundtrap - calibrate, daily average at ERDDAP step
+formatSensorValues <- function(x, type=c('fpod', 'soundtrap', 'hobo', 'vemco')) {
+    x$sensor_value_datetime <- parseTempDatetime(x, type)
+    x
+}
+
+parseTempDatetime <- function(x, 
+                              type=c('fpod', 'soundtrap', 'hobo', 'vemco')) {
+    type <- match.arg(tolower(type))
+    switch(type,
+           'fpod' = {
+               dtCol <- 'ChunkEnd'
+               result <- dmy_hm(x[[dtCol]])
+           },
+           'soundtrap' = {
+               dtCol <- 'Datetime_UTC'
+               result <- suppressWarnings(mdy_hms(x[[dtCol]]))
+               if(anyNA(result)) {
+                   result <- dmy_hms(x[[dtCol]])
+               }
+           },
+           'hobo' = {
+               dtCol <- 'Datetime_UTC'
+               result <- mdy_hms(x[[dtCol]])
+           },
+           'vemco' = {
+               dtCol <- 'Time_UTC'
+               result <- ymd_hms(x[[dtCol]])
+           }
+    )
+    if(!dtCol %in% names(x)) {
+        warning('Column ', dtCol, ' not present in data')
+        return(NULL)
+    }
+    if(anyNA(result)) {
+        warning('Not all times converted properly (type ', type, ')')
+    }
+    result
+}
+    

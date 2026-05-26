@@ -631,6 +631,21 @@ list(
             'Calibration applied: Tc = Tm - (-0.060*Tm - 1.26), where Tm is measured temperature'
         result
     }),
+    # Sensor Values ----
+    tar_target(sensor_values_raw, {
+        result <- vector('list', length=nrow(sensor_datasets))
+        for(i in seq_along(result)) {
+            if(is.na(sensor_datasets$filename[i])) {
+                next
+            }
+            if(!file.exists(sensor_datasets$filename[i])) {
+                warning('File ', sensor_datasets$filename[i], ' does not exist')
+                next
+            }
+            result[[i]] <- read.csv(sensor_datasets$filename[i], stringsAsFactors = FALSE)
+        }
+        result
+    }),
     # FPOD ----
     tar_target(fpod_times, {
         fpodFile <- 'FPOD_Dates.csv'
