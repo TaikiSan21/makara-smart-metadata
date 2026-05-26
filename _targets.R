@@ -537,9 +537,13 @@ list(
         # }))
         #### new ----
         result <- temp_devices
+        depsToUse <- st_deployment$deployments$deployment_code[
+          st_deployment$deployments$deployment_status != 'Deployed'
+        ]
         result <- filter(result, 
-                         deployment_code %in% st_deployment$deployments$deployment_code,
+                         deployment_code %in% depsToUse,
                          type %in% c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO'))
+        result$full <- NA
 
         filt_temp <- filter(temp_df, filtered)
         result <- bind_rows(lapply(split(result, list(result$deployment_code, result$type)), function(x) {
@@ -576,7 +580,7 @@ list(
                                   paste0(x$device_code, collapse=','),
                                   '(',paste0(x$source, collapse=','),')')
                 } else {
-                    msg <- paste0(nrow(x), ' files and ', nrow(thisMatch), ' devices')
+                    msg <- paste0(nrow(thisMatch), ' files and ', nrow(x), ' devices')
                 }
                 x$warning <- msg
             } else {
@@ -589,7 +593,7 @@ list(
                     ids <- gsub('^STD5_', '', ids)
                     ids <- gsub('_2018$', '', ids)
                     for(i in seq_along(ids)) {
-                        matchIx <- which(grepl(ids[i], full$file))
+                        matchIx <- which(grepl(ids[i], thisMatch$file))
                         if(length(matchIx) == 1) {
                             x$full[i] <- thisMatch$full[matchIx]
                             x$warning[i] <- NA
