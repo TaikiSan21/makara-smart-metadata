@@ -633,6 +633,9 @@ list(
     }),
     # Sensor Values ----
     tar_target(sensor_values_raw, {
+        if(is.null(sensor_datasets)) {
+            return(NULL)
+        }
         result <- vector('list', length=nrow(sensor_datasets))
         for(i in seq_along(result)) {
             if(is.na(sensor_datasets$filename[i])) {
