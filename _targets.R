@@ -44,12 +44,15 @@ list(
             'skip_deployments' = c('NEFSC_TEMP-EXP_202503_AVAST_ST7393',
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8024',
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8546'),
-            # Whether or not to export data already present in DB TRUE/FALSE
+            # device types to export temp data for, future vemco/st only
+            'temp_sensor_types' = c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO'),
+            # Whether or not to export data already present in DB TRUE/FALSE,
             'export_already_in_db' = TRUE,
             # Allow replacing non-NA database values with NA - almost always FALSE
             'replace_db_with_na' = FALSE,
             # keep extra columns with output - for testing
-            'keep_extra_columns' = FALSE
+            'keep_extra_columns' = FALSE,
+            'load_previous_temp' = TRUE
         )
     }),
     # constants ----
@@ -474,77 +477,20 @@ list(
         if(is.null(temp_df)) {
             return(NULL)
         }
-        # add device_codes to temp data
-        # result <- filter(temp_df, filtered)
-        # result <- bind_rows(lapply(split(result, list(result$deployment_code, result$type)), function(x) {
-        #     if(nrow(x) == 0) {
-        #         return(NULL)
-        #     }
-        #     thisDep <- x$deployment_code[1]
-        #     thisType <- x$type[1]
-        #     if(thisDep == 'NEFSC_SBNMS_202207_SB04' &&
-        #        thisType == 'SOUNDTRAP') {
-        #         x$device_code <- 'SOUNDTRAP-671666216'
-        #         return(x)
-        #     }
-        #     thisMatch <- filter(temp_devices, 
-        #                         deployment_code == thisDep,
-        #                         type == thisType)
-        #     
-        #     if(thisType == 'HOBO' &&
-        #        nrow(thisMatch) == 0) {
-        #         checkGeneric <- filter(temp_devices,
-        #                                deployment_code == thisDep,
-        #                                device_code == 'TEMPERATURE_SENSOR-GENERIC')
-        #         if(nrow(checkGeneric) == 1) {
-        #             x$warning <- 'TIDBIT listed in DB as TEMPERATURE_SENSOR-GENERIC'
-        #             x$device_code <- 'TEMPERATURE_SENSOR-GENERIC'
-        #             return(x)
-        #         }
-        #     }
-        #     if(nrow(x) != nrow(thisMatch)) {
-        #         # msg <- paste0('Deployment ', thisDep, ' type ', thisType, 
-        #         # ' has ', nrow(x), ' files and ', nrow(thisMatch), ' devices\n', sep='')
-        #         if(nrow(thisMatch) != 0) {
-        #             msg <- paste0(nrow(x), ' files and ', nrow(thisMatch), ' devices:',
-        #                           paste0(thisMatch$device_code, collapse=','),
-        #                           '(',paste0(thisMatch$source, collapse=','),')')
-        #         } else {
-        #             msg <- paste0(nrow(x), ' files and ', nrow(thisMatch), ' devices')
-        #         }
-        #         x$warning <- msg
-        #     } else {
-        #         x$device_code <- thisMatch$device_code
-        #         if(nrow(x) != 1) {
-        #             x$warning <- 'Multiple devices not actually matched yet'
-        #             x$device_code <- paste0(x$device_code, '(', thisMatch$source, ')')
-        #             ids <- gsub('SOUNDTRAP-', '', thisMatch$device_code)
-        #             ids <- gsub('^HF_4_', '', ids)
-        #             ids <- gsub('^STD5_', '', ids)
-        #             ids <- gsub('_2018$', '', ids)
-        #             for(i in seq_along(ids)) {
-        #                 matchIx <- which(grepl(ids[i], x$file))
-        #                 if(length(matchIx) == 1) {
-        #                     x$device_code[matchIx] <- thisMatch$device_code[i]
-        #                     x$warning[matchIx] <- NA
-        #                 }
-        #             }
-        #             
-        #         }
-        #         x
-        #     }
-        #     x
-        # }))
-        #### new ----
         result <- temp_devices
         depsToUse <- st_deployment$deployments$deployment_code[
-          st_deployment$deployments$deployment_status != 'Deployed'
+            st_deployment$deployments$deployment_status != 'Deployed'
         ]
+        if(isTRUE(params$load_previous_temp)) {
+            depsToUse <- unique(c(depsToUse,
+                                  db$deployments_deployment_code
+            ))
+        }
         result <- filter(result, 
                          deployment_code %in% depsToUse,
-                         type %in% c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO'))
+                         type %in% params$temp_sensor_types)
         result$full <- NA
-
+        
         filt_temp <- filter(temp_df, filtered)
         result <- bind_rows(lapply(split(result, list(result$deployment_code, result$type)), function(x) {
             if(nrow(x) == 0) {
@@ -606,7 +552,6 @@ list(
             x
         }))
         
-        # endnew----
         noDevice <- is.na(result$device_code)
         
         result <- select(result,
@@ -629,21 +574,49 @@ list(
         ## ST calibration ----
         result$sensor_dataset_comments[result$type == 'SOUNDTRAP'] <- 
             'Calibration applied: Tc = Tm - (-0.060*Tm - 1.26), where Tm is measured temperature'
+        result$sensor_dataset_comments[result$type == 'FPOD'] <- 
+            'Data have been aggregated to hourly mean values from the original 1-minute resolution. Full resolution data can be found at the sensor_dataset_uri'
+        result$value <- lapply(result$filename, function(x) {
+            if(is.na(x)) {
+                return(NULL)
+            }
+            if(!file.exists(x)) {
+                warning('File ', sensor_datasets$filename[i], ' does not exist')
+                return(NULL)
+            }
+            read.csv(x, stringsAsFactors = FALSE)
+        })
+        result$sensor_dataset_uri <- gsub('Z:', 'gs://nefsc-1-pab', result$filename)
+        
         result
     }),
     # Sensor Values ----
-    tar_target(sensor_values_raw, {
-        result <- vector('list', length=nrow(sensor_datasets))
-        for(i in seq_along(result)) {
-            if(is.na(sensor_datasets$filename[i])) {
+    # get from $values i attached to sd, unnest from there
+    #so easy to grab meta-cols
+    tar_target(sensor_values, {
+        result <- sensor_datasets
+        # do format
+        temp <- vector('list', length=nrow(result))
+        for(i in seq_along(temp)) {
+            val <- formatSensorValues(
+                result$value[[i]], 
+                type=tolower(result$type[i]), 
+                name=basename(result$filename[i])
+            )
+            if(is.null(val)) {
                 next
             }
-            if(!file.exists(sensor_datasets$filename[i])) {
-                warning('File ', sensor_datasets$filename[i], ' does not exist')
-                next
-            }
-            result[[i]] <- read.csv(sensor_datasets$filename[i], stringsAsFactors = FALSE)
+            temp[[i]] <- val
         }
+        result$value <- temp
+        result <- result %>% 
+            unnest(value) %>% 
+            select(
+                organization_code,
+                deployment_code,
+                sensor_dataset_code,
+                sensor_value_datetime,
+                sensor_value_value)
         result
     }),
     # FPOD ----
@@ -906,7 +879,22 @@ list(
             out$recording_intervals <- rec_int_out
         }
         if(!is.null(sensor_datasets)) {
-            out$sensor_datasets <- sensor_datasets
+            depsToUpload <- unique(c(out$deployments$deployment_code,
+                                     out$recordings$deployment_code))
+            sd <- filter(sensor_datasets, deployment_code %in% depsToUpload)
+            noFile <- is.na(sd$filename)
+            if(any(noFile)) {
+                warning(sum(noFile), ' devices are missing temperature data')
+                out$warnings <- addWarning(
+                    vector('list', length=0), 
+                    deployment=sd$deployment_code[noFile],
+                    type='Missing Temperature Dataset',
+                    table='sensor_datasets',
+                    message=paste0("No temperature file found for device '",
+                                   sd$sensor_dataset_device_code[noFile], '"'))
+            }
+            out$sensor_datasets <- sd
+            out$sensor_values <- filter(sensor_values, deployment_code %in% depsToUpload)
         }
         out
     }),
