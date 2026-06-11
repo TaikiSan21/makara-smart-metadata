@@ -342,41 +342,127 @@ makeCloudSecrets <- function() {
 # special cases:
 # FPOD - hourly average and GSURI
 # Soundtrap - calibrate, daily average at ERDDAP step
-formatSensorValues <- function(x, type=c('fpod', 'soundtrap', 'hobo', 'vemco')) {
-    x$sensor_value_datetime <- parseTempDatetime(x, type)
+formatSensorValues <- function(x, type=c('fpod', 'soundtrap', 'hobo', 'vemco','temperature_sensor'), name=NULL) {
+    if(is.null(x)) {
+        return(x)
+    }
+    type <- match.arg(type)
+    switch(type,
+           'fpod' = {
+               valCol <- 'Temp'
+           },
+           'soundtrap' = {
+               valCol <- 'Temp_C'
+               if(!valCol %in% names(x)) {
+                   valCol <- 'Internal_temp_C'
+               }
+           },
+           'hobo' = {
+               valCol <- 'Temp_C'
+           },
+           'vemco' = {
+               valCol <- 'Temperature_C'
+           },
+           'temperature_sensor' = {
+               valCol <- 'Temp_C'
+           }
+    )
+    if(!valCol %in% names(x)) {
+        msg <- paste0('Column ', valCol, ' not present in data')
+        if(!is.null(name)) {
+            msg <- paste0(msg, ' (', name, ')')
+        }
+        warning(msg)
+        # return(NULL)
+    }
+    x$sensor_value_value <- x[[valCol]]
+    x$sensor_value_datetime <- parseTempDatetime(x, type=type, name=name)
+    x <- x[c('sensor_value_value', 'sensor_value_datetime')]
+    # group to hourly mean
+    if(type == 'fpod') {
+        x <- mutate(x,
+                    sensor_value_datetime = floor_date(sensor_value_datetime, unit='1hour')
+        ) %>% 
+            group_by(sensor_value_datetime) %>% 
+            summarise(sensor_value_value = mean(sensor_value_value)) %>% 
+            ungroup()
+    }
+    # apply calibration
+    # Tc = Tm - (-0.060*Tm - 1.26)
+    if(type == 'soundtrap') {
+        x <- x %>% 
+            mutate(
+                sensor_value_value = sensor_value_value - (-0.060*sensor_value_value - 1.26)
+            )
+    }
     x
 }
 
 parseTempDatetime <- function(x, 
-                              type=c('fpod', 'soundtrap', 'hobo', 'vemco')) {
-    type <- match.arg(tolower(type))
+                              type=c('fpod', 'soundtrap', 'hobo', 'vemco', 'temperature_sensor'),
+                              name=NULL) {
+    # type <- tolower(type)
+    type <- match.arg(type)
     switch(type,
            'fpod' = {
                dtCol <- 'ChunkEnd'
+               valCol <- 'Temp'
                result <- dmy_hm(x[[dtCol]])
            },
            'soundtrap' = {
                dtCol <- 'Datetime_UTC'
+               valCol <- 'Temp_C'
+               if(!valCol %in% names(x)) {
+                   valCol <- 'Internal_temp_C'
+               }
                result <- suppressWarnings(mdy_hms(x[[dtCol]]))
                if(anyNA(result)) {
-                   result <- dmy_hms(x[[dtCol]])
+                   result <- suppressWarnings(dmy_hms(x[[dtCol]]))
+               }
+               if(anyNA(result)) {
+                   result <- ymd_hms(x[[dtCol]])
                }
            },
            'hobo' = {
                dtCol <- 'Datetime_UTC'
-               result <- mdy_hms(x[[dtCol]])
+               valCol <- 'Temp_C'
+               result <- suppressWarnings(mdy_hms(x[[dtCol]]))
+               if(anyNA(result)) {
+                   result <- ymd_hms(x[[dtCol]])
+               }
+               
            },
            'vemco' = {
                dtCol <- 'Time_UTC'
-               result <- ymd_hms(x[[dtCol]])
+               valCol <- 'Temperature_C'
+               result <- suppressWarnings(ymd_hms(x[[dtCol]], truncated=3))
+               if(anyNA(result)) {
+                   result <- mdy_hm(x[[dtCol]])
+               }
+           },
+           'temperature_sensor' = {
+               dtCol <- 'Datetime_UTC'
+               valCol <- 'Temp_C'
+               result <- suppressWarnings(mdy_hms(x[[dtCol]]))
+               if(anyNA(result)) {
+                   result <- ymd_hms(x[[dtCol]])
+               }
            }
     )
     if(!dtCol %in% names(x)) {
-        warning('Column ', dtCol, ' not present in data')
+        msg <- paste0('Column ', dtCol, ' not present in data')
+        if(!is.null(name)) {
+            msg <- paste0(msg, ' (', name, ')')
+        }
+        warning(msg)
         return(NULL)
     }
     if(anyNA(result)) {
-        warning('Not all times converted properly (type ', type, ')')
+        msg <- paste0('Not all times converted properly (type ', type, ')')
+        if(!is.null(name)) {
+            msg <- paste0(msg, ' (', name, ')')
+        }
+        warning(msg)
     }
     result
 }
