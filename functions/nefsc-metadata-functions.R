@@ -207,7 +207,7 @@ addNefscProjectCode <- function(x) {
     #     mutate(project_code = paste0(project_code, '_', gsub('[0-9]', '', site_code))) %>% 
     #     distinct()
     
-    nefscOrg <- x$organization_code == 'NEFSC'
+    nefscOrg <- x$organization_code %in% c('NEFSC', 'PMEL')
     x$project_code[nefscOrg] <- gsub('[0-9]', '', x$deployment_code[nefscOrg])
     x$project_code[nefscOrg] <- gsub('__', '_', x$project_code[nefscOrg])
     x$site_code <- gsub('.*_([0-9A-Z-]*)$', '\\1', x$deployment_code)
@@ -237,6 +237,7 @@ addNefscProjectCode <- function(x) {
                     project_code == 'NEFSC_MA-RI_MONO' ~ 'NEFSC_MA-RI_SEAL',
                     project_code == 'PMEL_SBNMS' ~ 'PMEL_SBNMS-NRS',
                     project_code == 'PMEL_NE-OFFSHORE' ~ 'PMEL_NE-OFFSHORE-NRS',
+                    project_code == 'PMEL_NE-OFFSHORE_NRS' ~ 'PMEL_NE-OFFSHORE-NRS',
                     .default=project_code
                 )
     )
