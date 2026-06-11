@@ -594,6 +594,9 @@ list(
     # get from $values i attached to sd, unnest from there
     #so easy to grab meta-cols
     tar_target(sensor_values, {
+        if(is.null(sensor_datasets)) {
+            return(NULL)
+        }
         result <- sensor_datasets
         # do format
         temp <- vector('list', length=nrow(result))

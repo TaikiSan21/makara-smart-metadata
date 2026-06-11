@@ -238,7 +238,12 @@ addNefscProjectCode <- function(x) {
                     project_code == 'PMEL_SBNMS' ~ 'PMEL_SBNMS-NRS',
                     project_code == 'PMEL_NE-OFFSHORE' ~ 'PMEL_NE-OFFSHORE-NRS',
                     project_code == 'PMEL_NE-OFFSHORE_NRS' ~ 'PMEL_NE-OFFSHORE-NRS',
+                    project_code == 'NEFSC_NE-OFFSHORE_DRIFT' ~ 'NEFSC_NE-OFFSHORE',
                     .default=project_code
+                ),
+                site_code = case_when(
+                    project_code == 'NEFSC_NE-OFFSHORE' ~ 'NE-OFFSHORE',
+                    .default = site_code
                 )
     )
     tncOrg <- x$organization_code == 'TNC'
