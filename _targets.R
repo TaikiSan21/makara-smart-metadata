@@ -52,6 +52,7 @@ list(
             'replace_db_with_na' = FALSE,
             # keep extra columns with output - for testing
             'keep_extra_columns' = FALSE,
+            'skip_temperature' = TRUE,
             'load_previous_temp' = TRUE
         )
     }),
@@ -424,6 +425,9 @@ list(
     # Temp files ----
     tar_target(temp_directory, 'Z:/ANCILLARY_DATA/TEMPERATURE_DATA/'),
     tar_target(temp_files, {
+        if(isTRUE(params$skip_temperature)) {
+            return(NULL)
+        }
         if(!dir.exists(temp_directory)) {
             warning('Temperature directory ', temp_directory, ' does not exist')
             return(NULL)
