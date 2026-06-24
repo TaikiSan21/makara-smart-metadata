@@ -236,6 +236,7 @@ addNefscProjectCode <- function(x) {
                     project_code == 'NEFSC_MA-RI_MUSK' ~ 'NEFSC_MA-RI_SEAL',
                     project_code == 'NEFSC_MA-RI_MONO' ~ 'NEFSC_MA-RI_SEAL',
                     project_code == 'PMEL_SBNMS' ~ 'PMEL_SBNMS-NRS',
+                    project_code == 'PMEL_SBNMS_NRS' ~ 'PMEL_SBNMS-NRS',
                     project_code == 'PMEL_NE-OFFSHORE' ~ 'PMEL_NE-OFFSHORE-NRS',
                     project_code == 'PMEL_NE-OFFSHORE_NRS' ~ 'PMEL_NE-OFFSHORE-NRS',
                     project_code == 'NEFSC_NE-OFFSHORE_DRIFT' ~ 'NEFSC_NE-OFFSHORE_DRIFT',
