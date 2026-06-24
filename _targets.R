@@ -53,7 +53,8 @@ list(
             # keep extra columns with output - for testing
             'keep_extra_columns' = FALSE,
             'skip_temperature' = TRUE,
-            'load_previous_temp' = TRUE
+            'load_previous_temp' = TRUE,
+            'update_device_orgs' = TRUE
         )
     }),
     # constants ----
@@ -915,7 +916,7 @@ list(
                                 ncei=FALSE,
                                 dropEmpty = TRUE,
                                 dropExtra=!params$keep_extra_columns)
-        out <- checkDbValues(out, db)
+        out <- checkDbValues(out, db, updateDeviceOrgs=params$update_device_orgs)
         out <- checkDbReplacements(out, db, replaceWithNA = params$replace_db_with_na)
         checkWarnings(out)
         out
