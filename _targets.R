@@ -257,6 +257,8 @@ list(
         deployment$release_model[releaseIdOnly] <- 'VEMCO'
         releaseParks <- grepl('PARKSAUSTRALIA', deployment$deployment_code) & !is.na(deployment$release_model)
         deployment$release_model[releaseParks] <- 'ACOUSTIC_RELEASE'
+        needsSO <- grepl('SOLARONE', deployment$satellite_model) & !grepl('^SO', deployment$satellite_number)
+        deployment$satellite_number[needsSO] <- paste0('SO-', deployment$satellite_number[needsSO])
         deployment <- mutate(
             deployment,
             temp_model = toupper(temp_model),
