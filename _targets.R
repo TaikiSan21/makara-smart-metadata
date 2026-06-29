@@ -18,7 +18,7 @@ tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
 # Set TRUE to force re-loading BigQuery database
-reload_database <- FALSE
+reload_database <- TRUE
 
 ### dont change below ###
 if(!tar_exist_objects('db_raw')) {
@@ -255,6 +255,8 @@ list(
         # case if model name not given but ID is, assum vemco
         releaseIdOnly <- is.na(deployment$release_model) & !is.na(deployment$release_number)
         deployment$release_model[releaseIdOnly] <- 'VEMCO'
+        releaseParks <- grepl('PARKSAUSTRALIA', deployment$deployment_code) & !is.na(deployment$release_model)
+        deployment$release_model[releaseParks] <- 'ACOUSTIC_RELEASE'
         deployment <- mutate(
             deployment,
             temp_model = toupper(temp_model),
@@ -262,6 +264,7 @@ list(
             satellite_model = toupper(satellite_model),
             release_model = gsub('VR2AR', 'VEMCO', release_model),
             satellite_model = gsub('APOLLO X1', 'SATELLITE_TRACKER', satellite_model),
+            satellite_model = gsub('SOLARONE', 'SATELLITE_TRACKER', satellite_model),
             release_number = gsub('\\*\\*', '', release_number))
         deployment <- unite(deployment, 'temp_code', c('temp_model', 'temp_number'),
                             sep='-', na.rm=TRUE)
