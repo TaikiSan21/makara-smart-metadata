@@ -18,7 +18,7 @@ tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
 # Set TRUE to force re-loading BigQuery database
-reload_database <- TRUE
+reload_database <- FALSE
 
 ### dont change below ###
 if(!tar_exist_objects('db_raw')) {
@@ -54,7 +54,9 @@ list(
             'keep_extra_columns' = FALSE,
             'skip_temperature' = TRUE,
             'load_previous_temp' = TRUE,
-            'update_device_orgs' = TRUE
+            'update_device_orgs' = TRUE,
+            # set this to TRUE to remove mandatory fields with NA values
+            'drop_mandatory_na' = FALSE
         )
     }),
     # constants ----
@@ -920,7 +922,8 @@ list(
                                 # mandatory=mandatory_fields,
                                 ncei=FALSE,
                                 dropEmpty = TRUE,
-                                dropExtra=!params$keep_extra_columns)
+                                dropExtra=!params$keep_extra_columns,
+                                dropMandatoryNA=params$drop_mandatory_na)
         out <- checkDbValues(out, db, updateDeviceOrgs=params$update_device_orgs)
         out <- checkDbReplacements(out, db, replaceWithNA = params$replace_db_with_na)
         checkWarnings(out)
