@@ -136,7 +136,7 @@ addWarning <- function(x, deployment, table, type, message, row=NA) {
 # mandatory is constant list 
 # ncei flag is whether to check columns that are only mandatory for NCEI
 # dropEmpty is flag whether to drop empty non-mandatory columns from output
-checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE, dropExtra=TRUE) {
+checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE, dropExtra=TRUE, dropMandatoryNA=FALSE) {
     result <- templates[names(x)[names(x) %in% names(templates)]]
     onlyNotLost <- c('recording_start_datetime',
                      'recording_duration_secs',
@@ -242,6 +242,76 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE, dropExtr
                                 message=paste0('Mandatory columns ', 
                                                printN(thisMand[missMand], Inf), ' are missing'))
         }
+        # check that values in mandatory columns are not NA or ''
+        for(m in thisMand[!missMand]) {
+            if(is.character(thisTemp[[m]])) {
+                blankChar <- !is.na(thisData[[m]]) & thisData[[m]] == ''
+                if(any(blankChar)) {
+                    # warns <- addWarning(warns, deployment=thisData$deployment_code[blankChar],
+                    #                     type='Blank Characters in Mandatory Field',
+                    #                     table=n,
+                    #                     message=paste0("Character values in mandatory column '",
+                    #                                    m, "' are empty, will be replaced with NA"))
+                }
+                thisData[[m]][blankChar] <- NA
+            }
+            if(m == 'recording_timezone') {
+                badTz <- !grepl('^UTC[+-]?[0-9:]{0,5}$', thisData[[m]])
+                if(any(badTz)) {
+                    warns <- addWarning(warns, 
+                                        deployment=thisData$deployment_code[badTz],
+                                        row=which(badTz),
+                                        type='Invalid Timezone',
+                                        table=n,
+                                        message=paste0('Timezone ', thisData[[m]][badTz], ' is invalid'))
+                }
+            }
+            
+            naVals <- is.na(thisData[[m]])
+            # some columns in recordings are only mandatory if not lost
+            # and not UNUSABLE
+            if(n == 'recordings' &&
+               m %in% onlyNotLost) {
+                notLost <- !sapply(thisData$recording_device_lost, isTRUE)
+                naVals <- naVals & notLost
+                if('recording_quality_code' %in% names(thisData)) {
+                    notUnusable <- thisData$recording_quality_code != 'UNUSABLE' | is.na(thisData$recording_quality_code)
+                    naVals <- naVals & notUnusable
+                }
+            }
+            if(n == 'detections' &&
+               m == 'localization_method_code') {
+                isLocalized <- !is.na(thisData$localization_latitude)
+                naVals <- naVals & isLocalized
+            }
+            
+            if(n == 'detections' &&
+               m == 'localization_depth_method_code') {
+                isLocalizedDepth <- !is.na(thisData$localization_depth_m)
+                naVals <- naVals & isLocalizedDepth
+            }
+            
+            if(any(naVals)) {
+                if(isTRUE(dropMandatoryNA)) {
+                    warns <- addWarning(warns,
+                                        deployment=thisData$deployment_code[naVals],
+                                        row='Removed from output',
+                                        type='NA in Mandatory Field',
+                                        table=n,
+                                        message=paste0("Mandatory column '",
+                                                       m, "' is NA"))
+                    thisData <- thisData[!naVals, ]
+                } else {
+                    warns <- addWarning(warns,
+                                        deployment=thisData$deployment_code[naVals],
+                                        row=which(naVals),
+                                        type='NA in Mandatory Field',
+                                        table=n,
+                                        message=paste0("Mandatory column '",
+                                                       m, "' is NA"))
+                }
+            }
+        }
         # Fix time columns
         timeCols <- grep('datetime', names(thisData), value=TRUE)
         for(t in timeCols) {
@@ -342,65 +412,7 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE, dropExtr
                 )
             }
         }
-        # check that values in mandatory columns are not NA or ''
-        for(m in thisMand[!missMand]) {
-            if(is.character(thisTemp[[m]])) {
-                blankChar <- !is.na(thisData[[m]]) & thisData[[m]] == ''
-                if(any(blankChar)) {
-                    # warns <- addWarning(warns, deployment=thisData$deployment_code[blankChar],
-                    #                     type='Blank Characters in Mandatory Field',
-                    #                     table=n,
-                    #                     message=paste0("Character values in mandatory column '",
-                    #                                    m, "' are empty, will be replaced with NA"))
-                }
-                thisData[[m]][blankChar] <- NA
-            }
-            if(m == 'recording_timezone') {
-                badTz <- !grepl('^UTC[+-]?[0-9:]{0,5}$', thisData[[m]])
-                if(any(badTz)) {
-                    warns <- addWarning(warns, 
-                                        deployment=thisData$deployment_code[badTz],
-                                        row=which(badTz),
-                                        type='Invalid Timezone',
-                                        table=n,
-                                        message=paste0('Timezone ', thisData[[m]][badTz], ' is invalid'))
-                }
-            }
-            
-            naVals <- is.na(thisData[[m]])
-            # some columns in recordings are only mandatory if not lost
-            # and not UNUSABLE
-            if(n == 'recordings' &&
-               m %in% onlyNotLost) {
-                notLost <- !sapply(thisData$recording_device_lost, isTRUE)
-                naVals <- naVals & notLost
-                if('recording_quality_code' %in% names(thisData)) {
-                    notUnusable <- thisData$recording_quality_code != 'UNUSABLE' | is.na(thisData$recording_quality_code)
-                    naVals <- naVals & notUnusable
-                }
-            }
-            if(n == 'detections' &&
-               m == 'localization_method_code') {
-                isLocalized <- !is.na(thisData$localization_latitude)
-                naVals <- naVals & isLocalized
-            }
-            
-            if(n == 'detections' &&
-               m == 'localization_depth_method_code') {
-                isLocalizedDepth <- !is.na(thisData$localization_depth_m)
-                naVals <- naVals & isLocalizedDepth
-            }
-            
-            if(any(naVals)) {
-                warns <- addWarning(warns,
-                                    deployment=thisData$deployment_code[naVals],
-                                    row=which(naVals),
-                                    type='NA in Mandatory Field',
-                                    table=n,
-                                    message=paste0("Mandatory column '",
-                                                   m, "' is NA"))
-            }
-        }
+        
         # check some reference tables
         if(n == 'detections') {
             wrongSource <- !thisData$detection_sound_source_code %in% refs$sound_sources$code

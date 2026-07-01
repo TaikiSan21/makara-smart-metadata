@@ -1,5 +1,6 @@
 # fpod fixo
-fpodPath <- '../Data/MakBal/fpod'
+# from X:\DETECTOR_OUTPUT\FPOD_ODONTOCETE_FIXED
+fpodPath <- 'FPOD'
 fpodFiles <- file.path(fpodPath, 
                        # c('SBMNS_Metadata.xlsx', 'Metadata.xlsx'))
                        c('Metadata.xlsx'))
