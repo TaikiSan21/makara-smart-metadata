@@ -120,6 +120,40 @@ readStDeploymentSmart <- function(secrets=NULL, token, id='8633482340525964') {
     data
 }
 
+readFpodSmart <- function(secrets, id='4988664309671820') {
+    if(!is.null(secrets)) {
+        secrets <- readSmartSecrets(secrets)
+        token <- secrets$smart_key
+        # id <- secrets$pa_data_id
+    }
+    header <- add_headers(Authorization = paste0('Bearer ', token))
+    base <- 'https://api.smartsheetgov.com/2.0/sheets'
+    apiData <- GET(url=paste0(base, '/', id), config=header)
+    data <- smartToDf(apiData)
+    data <- rename(data,
+                   'deployment_code' = 'Project Name',
+                   'start_date' = 'Usable Data Timeline - Start Date',
+                   'start_time' = 'Usable Data Timeline - Start Time',
+                   'end_date' = 'Usable Data Timeline - End Date',
+                   'end_time' = 'Usable Data Timeline - End Time'
+    )
+    data$fpod_start <- formatDatetime(date=data$start_date,
+                                      time=data$start_time,
+                                      warn=FALSE)
+    data$fpod_end <- formatDatetime(date=data$end_date,
+                                    time=data$end_time,
+                                    warn=FALSE)
+    data$deployment_code <- gsub(' ', '', data$deployment_code)
+    select(data, 
+           deployment_code,
+           start_date,
+           start_time,
+           end_date,
+           end_time,
+           fpod_start,
+           fpod_end)
+}
+
 formatGoogleQAQC <- function(x, map) {
     if(ncol(x) <= 2) {
         return(NULL)

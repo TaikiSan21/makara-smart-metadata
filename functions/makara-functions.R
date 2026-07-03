@@ -354,8 +354,8 @@ checkMakTemplate <- function(x, templates, ncei=FALSE, dropEmpty=FALSE, dropExtr
             if(!all(se %in% names(thisData))) {
                 next
             }
-            naStart <- is.na(thisData[[startCol]])
-            naEnd <- is.na(thisData[[endCol]])
+            naStart <- is.na(thisData[[startCol]]) | thisData[[startCol]] == ''
+            naEnd <- is.na(thisData[[endCol]]) | thisData[[endCol]] == ''
             hasBoth <- !naStart & !naEnd
             futureStart <- ymd_hms(thisData[[startCol]][!naStart]) > nowUTC()
             if(any(futureStart)) {

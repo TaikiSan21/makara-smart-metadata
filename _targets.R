@@ -636,16 +636,17 @@ list(
     }),
     # FPOD ----
     tar_target(fpod_times, {
-        fpodFile <- 'FPOD_Dates.csv'
-        data <- read.csv(fpodFile, stringsAsFactors = FALSE)
-        data$fpod_start <- formatDatetime(date=data$start_date,
-                                          time=data$start_time,
-                                          warn=FALSE)
-        data$fpod_end <- formatDatetime(date=data$end_date,
-                                        time=data$end_time,
-                                        warn=FALSE)
-        data <- rename(data, deployment_code=deployment)
-        data$deployment_code <- gsub(' ', '', data$deployment_code)
+        # fpodFile <- 'FPOD_Dates.csv'
+        # data <- read.csv(fpodFile, stringsAsFactors = FALSE)
+        # data$fpod_start <- formatDatetime(date=data$start_date,
+        #                                   time=data$start_time,
+        #                                   warn=FALSE)
+        # data$fpod_end <- formatDatetime(date=data$end_date,
+        #                                 time=data$end_time,
+        #                                 warn=FALSE)
+        # data <- rename(data, deployment_code=deployment)
+        # data$deployment_code <- gsub(' ', '', data$deployment_code)
+        data <- readFpodSmart(secrets)
         data
     }, cue=tar_cue('always')),
     # combine sources ----

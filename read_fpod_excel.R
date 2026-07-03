@@ -73,3 +73,25 @@ hm <- bind_rows(lapply(fpodFiles, readOneFpodMeta))
 
 write.csv(hm, file='FPOD_Dates.csv', row.names = FALSE)
 
+# check csv against smartsheets ----
+secrets <- '.secrets/secrets.yml'
+smartpod <- readFpodSmart(secrets)
+smartpod
+
+fpod <- read.csv('FPOD_Dates.csv')
+fpod$deployment <- gsub(' ', '', fpod$deployment)
+str(fpod)
+str(smartpod)
+
+checko <- smartpod %>% 
+    left_join(select(fpod,
+                     deployment_code=deployment,
+                     csv_start=start_date,
+                     csv_end=end_date
+    ),
+    by=c('deployment_code')
+    )
+checko$update <- !is.na(checko$csv_start) & is.na(checko$start_date)
+any(checko$update)
+str(checko)
+write.csv(checko, file='FPOD/SmartMatch.csv', row.names=FALSE)
