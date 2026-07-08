@@ -158,10 +158,22 @@ formatGoogleQAQC <- function(x, map) {
     if(ncol(x) <= 2) {
         return(NULL)
     }
+    if(x$sheet_name[1] == 'Recording_intervals') {
+        return(NULL)
+    }
     one <- myRenamer(x, map=map)
     one <- one[!is.na(one$deployment_code), ]
     if(!'st_serial_number' %in% names(one)) {
         one$st_serial_number <- NA
+    }
+    one$deployment_code <- unlist(one$deployment_code)
+    oldParens <- grepl('\\(', one$deployment_code)
+    if(any(oldParens)) {
+        deps <- strsplit(one$deployment_code[oldParens], ' ')
+        for(i in seq_along(deps)) {
+            one$deployment_code[which(oldParens)[i]] <- deps[[i]][1]
+            one$st_serial_number[which(oldParens)[i]] <- deps[[i]][length(deps[[i]])]
+        }
     }
     one$st_serial_number <- as.character(one$st_serial_number)
     timeCols <- c(
