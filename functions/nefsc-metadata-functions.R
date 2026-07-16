@@ -382,7 +382,7 @@ makeCloudSecrets <- function() {
 # special cases:
 # FPOD - hourly average and GSURI
 # Soundtrap - calibrate, daily average at ERDDAP step
-formatSensorValues <- function(x, type=c('fpod', 'soundtrap', 'hobo', 'vemco','temperature_sensor'), name=NULL) {
+formatSensorValues <- function(x, type=c('fpod', 'soundtrap', 'hobo', 'vemco','temperature_sensor', 'ctd'), name=NULL) {
     if(is.null(x)) {
         return(x)
     }
@@ -404,6 +404,9 @@ formatSensorValues <- function(x, type=c('fpod', 'soundtrap', 'hobo', 'vemco','t
                valCol <- 'Temperature_C'
            },
            'temperature_sensor' = {
+               valCol <- 'Temp_C'
+           },
+           'ctd' = {
                valCol <- 'Temp_C'
            }
     )
@@ -439,7 +442,7 @@ formatSensorValues <- function(x, type=c('fpod', 'soundtrap', 'hobo', 'vemco','t
 }
 
 parseTempDatetime <- function(x, 
-                              type=c('fpod', 'soundtrap', 'hobo', 'vemco', 'temperature_sensor'),
+                              type=c('fpod', 'soundtrap', 'hobo', 'vemco', 'temperature_sensor', 'ctd'),
                               name=NULL) {
     # type <- tolower(type)
     type <- match.arg(type)
@@ -466,7 +469,7 @@ parseTempDatetime <- function(x,
            'hobo' = {
                dtCol <- 'Datetime_UTC'
                valCol <- 'Temp_C'
-               result <- suppressWarnings(mdy_hms(x[[dtCol]]))
+               result <- suppressWarnings(mdy_hms(x[[dtCol]], truncated=1))
                if(anyNA(result)) {
                    result <- ymd_hms(x[[dtCol]])
                }
@@ -487,6 +490,11 @@ parseTempDatetime <- function(x,
                if(anyNA(result)) {
                    result <- ymd_hms(x[[dtCol]])
                }
+           },
+           'ctd' = {
+               dtCol <- 'Datetime_UTC'
+               valCol <- 'Temp_C'
+               result <- mdy_hms(x[[dtCol]])
            }
     )
     if(!dtCol %in% names(x)) {
