@@ -120,6 +120,47 @@ readStDeploymentSmart <- function(secrets=NULL, token, id='8633482340525964') {
     data
 }
 
+readNRSDeploymentSmart <- function(secrets=NULL, token, id='1495697129269132') {
+    if(!is.null(secrets)) {
+        secrets <- readSmartSecrets(secrets)
+        token <- secrets$smart_key
+        # id <- secrets$st_deployment_id
+    }
+    header <- add_headers(Authorization = paste0('Bearer ', token))
+    base <- 'https://api.smartsheetgov.com/2.0/sheets'
+    apiData <- GET(url=paste0(base, '/', id), config=header)
+    data <- smartToDf(apiData)
+    data$deployment_code <-  paste0('PMEL_',
+                                    data$`Region Code`,
+                                    '_',
+                                    format(ymd(data$`Deployment Date/Time`), format='%Y%m'),
+                                    '_',
+                                    data$`Site Code`)
+    data$device_code <- data[['Hydrophone Name/SN']]
+    data$preamp <- gsub('\\s?-\\s?http.*$', '', data[['Pre-Amp (link)']])
+    data$recording_device_depth_m <- as.numeric(data[['Recorder Depth (meters)']])
+    data <- data %>% 
+        mutate(device_code = gsub('\\-', '', device_code),
+               device_code = gsub('\\/', '-', device_code),
+               device_code = gsub('SoundTrap SN: ', 'ST', device_code),
+               device_code = gsub(' ', '', device_code),
+               device_code = case_when(
+                   grepl('^H', device_code) ~ paste0('HYDROPHONE_INDIVIDUAL-', device_code),
+                   grepl('^ST[0-9]+', device_code) ~ gsub('^ST', 'SOUNDTRAP-', device_code)
+               ),
+               preamp_code = gsub('\\/', '-', preamp),
+               preamp_code = case_when(
+                   !is.na(preamp_code) ~ paste0('PREAMP-', preamp_code)
+                   ),
+               recording_code = case_when(
+                   grepl('^SOUNDTRAP', device_code) ~ 'SOUNDTRAP_RECORDING',
+                   grepl('^HYDROPHONE_INDIVIDUAL', device_code) ~ 'HARU_RECORDING'
+               )
+        )
+    data <- combineColumns(data, into='recording_device_codes', columns=c('device_code', 'preamp_code'), sep=',')
+    data
+}
+
 readFpodSmart <- function(secrets, id='4988664309671820') {
     if(!is.null(secrets)) {
         secrets <- readSmartSecrets(secrets)
@@ -158,10 +199,22 @@ formatGoogleQAQC <- function(x, map) {
     if(ncol(x) <= 2) {
         return(NULL)
     }
+    if(x$sheet_name[1] == 'Recording_intervals') {
+        return(NULL)
+    }
     one <- myRenamer(x, map=map)
     one <- one[!is.na(one$deployment_code), ]
     if(!'st_serial_number' %in% names(one)) {
         one$st_serial_number <- NA
+    }
+    one$deployment_code <- unlist(one$deployment_code)
+    oldParens <- grepl('\\(', one$deployment_code)
+    if(any(oldParens)) {
+        deps <- strsplit(one$deployment_code[oldParens], ' ')
+        for(i in seq_along(deps)) {
+            one$deployment_code[which(oldParens)[i]] <- deps[[i]][1]
+            one$st_serial_number[which(oldParens)[i]] <- deps[[i]][length(deps[[i]])]
+        }
     }
     one$st_serial_number <- as.character(one$st_serial_number)
     timeCols <- c(

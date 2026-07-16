@@ -18,7 +18,7 @@ tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
 # Set TRUE to force re-loading BigQuery database
-reload_database <- FALSE
+reload_database <- TRUE
 
 ### dont change below ###
 if(!tar_exist_objects('db_raw')) {
@@ -38,6 +38,7 @@ list(
         list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
             'pacm_status_to_export' = c('READY'),
+            # 'pacm_status_to_export' = c('PENDING'),
             # 'pacm_status_to_export' = c('READY', 'NA'),
             # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED'),
             # identify specific deployments to skip, if wanted
@@ -111,13 +112,32 @@ list(
         drive_download(file = sheetId, path=qaqc_file, overwrite = TRUE)
         sheetNames <- excel_sheets(qaqc_file)
         result <- lapply(sheetNames, function(x) {
-            one <- read_excel(qaqc_file, sheet=x, skip=5, col_types = 'list')
+            skip <- ifelse(x == 'Recording_intervals', 0, 5)
+            one <- read_excel(qaqc_file, sheet=x, skip=skip, col_types = 'list')
             one$sheet_name <- x
             one <- janitor::clean_names(one)
             one
         })
         result
     }, cue=tar_cue('always')),
+    tar_target(rec_int_google, {
+        for(i in seq_along(qaqc_google_raw)) {
+            if(qaqc_google_raw[[i]]$sheet_name[1] != 'Recording_intervals') {
+                next
+            }
+            result <- qaqc_google_raw[[i]]
+        }
+        result[['recording_interval_start_datetime']] <- googsTimeToChar(result[['recording_interval_start_datetime']])
+        result[['recording_interval_end_datetime']] <- googsTimeToChar(result[['recording_interval_end_datetime']])
+        for(i in seq_len(ncol(result))) {
+            if(is.list(result[[i]])) {
+                result[[i]] <- unlist(result[[i]])
+            }
+        }
+        result$st_serial_number <- as.character(result$st_serial_number)
+        result$recording_interval_comments <- as.character(result$recording_interval_comments)
+        result
+    }),
     tar_target(qaqc_google, {
         googsMap <- list(
             'usable_start_datetime_utc_beginning_of_no_boat_noise' = 'recording_usable_start_datetime', #
@@ -175,23 +195,28 @@ list(
         select(result , all_of(keepCols))
     }),
     # smart sheets ----
-    # tar_target(data_upload_raw, {
-    #     readPaDataSmart(secrets)
-    # }, cue=tar_cue('always')),
-    # tar_target(data_upload, {
-    #     # Only has instruemnt type or QAQC status we might care about
-    #     dataUpMap <- list(
-    #         'Project Name' = 'deployment_code',
-    #         'Instrument Type' = 'instrument_type',
-    #         'Status' = 'qaqc_status'
-    #     )
-    #     upCols <- c('deployment_code', 'qaqc_status', 'instrument_type')
-    #     myRenamer(data_upload_raw, map=dataUpMap) %>% 
-    #         select(all_of(upCols)) %>% 
-    #         filter(!is.na(deployment_code)) %>% 
-    #         mutate(instrument_type = toupper(instrument_type),
-    #                recording_code = paste0(instrument_type, '_RECORDING'))
-    # }),
+    tar_target(data_upload_raw, {
+        readPaDataSmart(secrets)
+    }, cue=tar_cue('always')),
+    tar_target(data_upload, {
+        # Only has instruemnt type or QAQC status we might care about
+        dataUpMap <- list(
+            'Project Name' = 'deployment_code',
+            'Instrument Type' = 'instrument_type',
+            'Item' = 'device',
+            'Status' = 'qaqc_status'
+        )
+        upCols <- c('deployment_code', 'qaqc_status', 'instrument_type', 'device')
+        myRenamer(data_upload_raw, map=dataUpMap) %>%
+            select(all_of(upCols)) %>%
+            filter(!is.na(deployment_code)) %>%
+            mutate(instrument_type = toupper(instrument_type),
+                   recording_code = paste0(instrument_type, '_RECORDING'))
+    }, cue=tar_cue('always')),
+    tar_target(nrs_deployment, {
+        result <- readNRSDeploymentSmart(secrets)
+        result
+    }),
     # not currently used for anything
     tar_target(instrument_tracking_raw, {
         readInsTrackSmart(secrets)
@@ -664,11 +689,7 @@ list(
             is.na(result$pacm_db_status)
         result <- result[!dropIx, ]
         result$instrument_type <- constants$instrument_type
-        # result <- left_join(
-        #     result,
-        #     distinct(select(data_upload, deployment_code, instrument_type)),
-        #     by='deployment_code',
-        #     relationship='many-to-one')
+
         result$recording_code <- paste0(result$instrument_type, '_RECORDING')
         ###
         multiDep <- names(which(table(result$deployment_code) > 1))
@@ -681,8 +702,10 @@ list(
         # result$pacm_db_status[
         #     result$deployment_code == 'NEFSC_GOM_202412_USTR12' &
         #         result$pacm_db_status == 'NA'] <- 'READY'
-        result <- result %>%
-            filter(pacm_db_status %in% params$pacm_status_to_export)
+        
+        # result <- result %>%
+        #     filter(pacm_db_status %in% params$pacm_status_to_export)
+        
         result$deployment_platform_type_code <- constants$platform
         if(length(params$skip_deployments) > 0) {
             dropIx <- result$deployment_code %in% params$skip_deployments
@@ -762,10 +785,13 @@ list(
         # print(table(result$organization_code))
         result <- addNefscProjectCode(result)
         result <- unite(result, 'recording_comments', c('recording_comments', 'depth_comment'), sep=';', na.rm=TRUE)
-        dep_out <- select(result, any_of(c(names(templates$deployments), 'pacm_db_status', 'deployment_status')))
+        dep_out <- result %>% 
+            filter(pacm_db_status %in% params$pacm_status_to_export) %>% 
+            select(any_of(c(names(templates$deployments), 'pacm_db_status', 'deployment_status')))
         # rec_out <- select(result, any_of(names(templates$recordings)))
         rec_out <- result %>% 
-            filter(deployment_status %in% c('Recovered', 'No acoustic data (recorder lost or damaged)')) %>% 
+            filter(pacm_db_status %in% params$pacm_status_to_export) %>% 
+            filter(deployment_status %in% c('Recovered', 'No acoustic data (recorder lost or damaged)', NA)) %>% 
             select(any_of(names(templates$recordings)))
         # multiRecorderDep <- names(which(table(rec_out$deployment_code) > 1))
         
@@ -840,6 +866,25 @@ list(
                               any_of(c(names(templates$recording_intervals), 
                                        'compromised_starts',
                                        'compromised_ends')))
+        rec_int_out <- formatRecordingIntervals(rec_int_out)
+        # switch to googs rec int
+        rec_int_out <- rec_int_google
+        rec_int_out$multiRecorder <- rec_int_out$deployment_code %in% multiRecorderDep
+        rec_int_out <-  bind_rows(lapply(split(rec_int_out, rec_int_out$multiRecorder), function(x) {
+            if(isTRUE(x$multiRecorder)) {
+                left_join(x,
+                          select(result, deployment_code, st_serial_number, recording_code, organization_code),
+                          by=c('deployment_code', 'st_serial_number'),
+                          relationship='many-to-one'
+                )
+            } else {
+                left_join(x,
+                          select(result, deployment_code, recording_code, organization_code),
+                          by=c('deployment_code'),
+                          relationship='many-to-one'
+                )
+            }
+        }))
         ## manual fixes ----
         dep_out <- mutate(dep_out,
                           deployment_latitude = case_when(
@@ -887,10 +932,14 @@ list(
                               .default = recording_timezone
                           )
         )
-        
+        # filling PMEL fields from NRS smartsheet
+        rec_out <- fillFromOther(rec_out, 
+                                 nrs_deployment,
+                      cols=c('recording_code', 'recording_device_codes', 'recording_device_depth_m'),
+                      by='deployment_code')
         out <- list(deployments=dep_out,
                     recordings=rec_out)
-        rec_int_out <- formatRecordingIntervals(rec_int_out)
+        
         if(nrow(rec_int_out) > 0) {
             out$recording_intervals <- rec_int_out
         }
