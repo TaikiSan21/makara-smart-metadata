@@ -624,6 +624,7 @@ checkDbValues <- function(x, db=NULL, updateDeviceOrgs=TRUE) {
         mutate(ORIGROW=seq_len(n()),
                recording_device_codes = strsplit(recording_device_codes, ',')) %>% 
         unnest(recording_device_codes) %>% 
+        filter(!is.na(recording_device_codes)) %>% 
         left_join(mutate(db$devices, JOINCHECK=TRUE),
                   by=c('organization_code', 'recording_device_codes'='device_code')
         )
@@ -707,6 +708,7 @@ checkDbValues <- function(x, db=NULL, updateDeviceOrgs=TRUE) {
         mutate(ORIGROW=seq_len(n()),
                deployment_device_codes = strsplit(deployment_device_codes, ',')) %>% 
         unnest(deployment_device_codes) %>% 
+        filter(!is.na(deployment_device_codes)) %>% 
         left_join(
             mutate(db$devices, JOINCHECK=TRUE),
             by=c('organization_code', 'deployment_device_codes' = 'device_code')
@@ -1313,7 +1315,13 @@ checkRowDiffs <- function(x, y) {
         }
         valX <- x[[c]]
         valY <- y[[c]]
-        if(is.na(valX) && is.na(valY)) {
+        if(!is.na(valY) &&
+           is.character(valY) && 
+           valY == '') {
+            valY <- NA_character_
+        }
+        if((is.na(valX) || (is.character(valX) && valX == ''))
+           && is.na(valY)) {
             next
         }
         if(grepl('_json', c)) {
@@ -1461,5 +1469,41 @@ captureWarnings <- function(expr, deployment, table, type, name) {
     x <- list('output'=x)
     names(x) <- name
     x$warnings <- warns
+    x
+}
+
+fillFromOther <- function(x, y, cols, by, onlyFillNA=FALSE, fillWithNA=FALSE, verbose=FALSE) {
+    multiMatch <- numeric(0)
+    nFilled <- 0
+    for(i in seq_len(nrow(x))) {
+        matchY <- y[[by]] == x[[by]][i]
+        if(!any(matchY)) {
+            next
+        }
+        if(sum(matchY) > 1) {
+            multiMatch <- c(multiMatch, i)
+            next
+        }
+        thisMatch <- y[matchY, ]
+        for(c in cols) {
+            if(isTRUE(onlyFillNA) &&
+               !is.na(x[[c]][i])) {
+                next
+            }
+            thisVal <- thisMatch[[c]]
+            if(isFALSE(fillWithNA)  && is.na(thisVal)) {
+                next
+            }
+            x[[c]][i] <- thisVal
+            nFilled <- nFilled + 1
+        }
+    }
+    if(length(multiMatch) > 0) {
+        warning(length(multiMatch), ' rows in x matched more than one ',
+                'row of y (', printN(multiMatch), ')')
+    }
+    if(isTRUE(verbose)) {
+        cat('Changed', nFilled, 'values')
+    }
     x
 }

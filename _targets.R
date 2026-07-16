@@ -18,7 +18,7 @@ tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
 # Set TRUE to force re-loading BigQuery database
-reload_database <- FALSE
+reload_database <- TRUE
 
 ### dont change below ###
 if(!tar_exist_objects('db_raw')) {
@@ -38,6 +38,7 @@ list(
         list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
             'pacm_status_to_export' = c('READY'),
+            # 'pacm_status_to_export' = c('PENDING'),
             # 'pacm_status_to_export' = c('READY', 'NA'),
             # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED'),
             # identify specific deployments to skip, if wanted
@@ -194,23 +195,28 @@ list(
         select(result , all_of(keepCols))
     }),
     # smart sheets ----
-    # tar_target(data_upload_raw, {
-    #     readPaDataSmart(secrets)
-    # }, cue=tar_cue('always')),
-    # tar_target(data_upload, {
-    #     # Only has instruemnt type or QAQC status we might care about
-    #     dataUpMap <- list(
-    #         'Project Name' = 'deployment_code',
-    #         'Instrument Type' = 'instrument_type',
-    #         'Status' = 'qaqc_status'
-    #     )
-    #     upCols <- c('deployment_code', 'qaqc_status', 'instrument_type')
-    #     myRenamer(data_upload_raw, map=dataUpMap) %>% 
-    #         select(all_of(upCols)) %>% 
-    #         filter(!is.na(deployment_code)) %>% 
-    #         mutate(instrument_type = toupper(instrument_type),
-    #                recording_code = paste0(instrument_type, '_RECORDING'))
-    # }),
+    tar_target(data_upload_raw, {
+        readPaDataSmart(secrets)
+    }, cue=tar_cue('always')),
+    tar_target(data_upload, {
+        # Only has instruemnt type or QAQC status we might care about
+        dataUpMap <- list(
+            'Project Name' = 'deployment_code',
+            'Instrument Type' = 'instrument_type',
+            'Item' = 'device',
+            'Status' = 'qaqc_status'
+        )
+        upCols <- c('deployment_code', 'qaqc_status', 'instrument_type', 'device')
+        myRenamer(data_upload_raw, map=dataUpMap) %>%
+            select(all_of(upCols)) %>%
+            filter(!is.na(deployment_code)) %>%
+            mutate(instrument_type = toupper(instrument_type),
+                   recording_code = paste0(instrument_type, '_RECORDING'))
+    }, cue=tar_cue('always')),
+    tar_target(nrs_deployment, {
+        result <- readNRSDeploymentSmart(secrets)
+        result
+    }),
     # not currently used for anything
     tar_target(instrument_tracking_raw, {
         readInsTrackSmart(secrets)
@@ -785,7 +791,7 @@ list(
         # rec_out <- select(result, any_of(names(templates$recordings)))
         rec_out <- result %>% 
             filter(pacm_db_status %in% params$pacm_status_to_export) %>% 
-            filter(deployment_status %in% c('Recovered', 'No acoustic data (recorder lost or damaged)')) %>% 
+            filter(deployment_status %in% c('Recovered', 'No acoustic data (recorder lost or damaged)', NA)) %>% 
             select(any_of(names(templates$recordings)))
         # multiRecorderDep <- names(which(table(rec_out$deployment_code) > 1))
         
@@ -926,7 +932,11 @@ list(
                               .default = recording_timezone
                           )
         )
-        
+        # filling PMEL fields from NRS smartsheet
+        rec_out <- fillFromOther(rec_out, 
+                                 nrs_deployment,
+                      cols=c('recording_code', 'recording_device_codes', 'recording_device_depth_m'),
+                      by='deployment_code')
         out <- list(deployments=dep_out,
                     recordings=rec_out)
         
