@@ -980,7 +980,7 @@ list(
                                 dropEmpty = TRUE,
                                 dropExtra=!params$keep_extra_columns,
                                 dropMandatoryNA=params$drop_mandatory_na)
-        out <- checkDbValues(out, db, updateDeviceOrgs=params$update_device_orgs)
+        out <- checkDbValues(out, db, updateOrgs=params$update_device_orgs)
         out <- checkDbReplacements(out, db, replaceWithNA = params$replace_db_with_na)
         checkWarnings(out)
         out
