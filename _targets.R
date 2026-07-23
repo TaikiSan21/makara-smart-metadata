@@ -46,14 +46,15 @@ list(
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8024',
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8546'),
             # device types to export temp data for, future vemco/st only
-            'temp_sensor_types' = c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO'),
+            'temp_sensor_types' = c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO', 'CTD'),
+            # 'temp_sensor_types' = c('SOUNDTRAP', 'VEMCO'),
             # Whether or not to export data already present in DB TRUE/FALSE,
             'export_already_in_db' = TRUE,
             # Allow replacing non-NA database values with NA - almost always FALSE
             'replace_db_with_na' = FALSE,
             # keep extra columns with output - for testing
             'keep_extra_columns' = FALSE,
-            'skip_temperature' = TRUE,
+            'skip_temperature' = FALSE,
             'load_previous_temp' = TRUE,
             'update_device_orgs' = TRUE,
             # set this to TRUE to remove mandatory fields with NA values
@@ -520,7 +521,7 @@ list(
         ]
         if(isTRUE(params$load_previous_temp)) {
             depsToUse <- unique(c(depsToUse,
-                                  db$deployments_deployment_code
+                                  db$deployments$deployment_code
             ))
         }
         result <- filter(result, 
@@ -538,9 +539,14 @@ list(
             thisMatch <- filter(filt_temp, 
                                 deployment_code == thisDep,
                                 type == thisType)
-            
+            # this one is bad
+            if(thisDep == 'NEFSC_GOM_202006_YORK' &&
+               thisType == 'SOUNDTRAP') {
+                return(NULL)
+            }
             if(thisDep == 'NEFSC_SBNMS_202207_SB04' &&
                thisType == 'SOUNDTRAP') {
+                x <- x[x$device_code == 'SOUNDTRAP-671666216', ]
                 x$full <- grep('671666216', thisMatch$full, value=TRUE)
                 return(x)
             }
