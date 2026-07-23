@@ -661,7 +661,7 @@ checkWithOrgs <- function(x, y, by, table='', update=TRUE) {
         mutate(ORIGROW=seq_len(n()),
                '{xCol}' := strsplit(.data[[xCol]], ',')) %>% 
         unnest(all_of(unname(xCol))) %>% 
-        doJoinCheck(y, by=c('organization_code', by), fixOrgs=TRUE)
+        doJoinCheck(y, by=c('organization_code', by), fixOrgs=TRUE, verbose=FALSE)
     
     missDev <- checkDf$new & !is.na(checkDf[[xCol]])
     warns <- vector('list', length=0)
