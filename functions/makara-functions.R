@@ -763,7 +763,7 @@ if(packageVersion('makaraValidatr') >= '0.5.0') {
     joinRequirements$analyses <- c('organization_code', 'deployment_code', 'analysis_code', 'deployment_organization_code')
 }
 # check if these entries are already in Makara using joinReqs above
-checkAlreadyDb <- function(x, db) {
+checkAlreadyDb <- function(x, db, verbose=TRUE) {
     # tables to not check against
     noCheck <- c('detections', 'sensor_values', 'track_positions', 'warnings')
     for(j in names(x)) {
@@ -799,7 +799,7 @@ checkAlreadyDb <- function(x, db) {
                     }
                 }
             }
-            x[[j]] <- doJoinCheck(x[[j]], db[[j]], by=joinRequirements[[j]], name=j)
+            x[[j]] <- doJoinCheck(x[[j]], db[[j]], by=joinRequirements[[j]], name=j, verbose=verbose)
             if(j == 'analyses') {
                 if(isTRUE(noDepOrg)) {
                     x[[j]]$deployment_organization_code <- NULL

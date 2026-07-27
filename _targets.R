@@ -18,7 +18,7 @@ tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
 # Set TRUE to force re-loading BigQuery database
-reload_database <- TRUE
+reload_database <- FALSE
 
 ### dont change below ###
 if(!tar_exist_objects('db_raw')) {
@@ -454,6 +454,19 @@ list(
         )
         all_devices$type[all_devices$type == 'TIDBIT'] <- 'HOBO'
         all_devices$type[grepl('CTD', all_devices$device_code)] <- 'CTD'
+        ## drop unexpected types ----
+        all_devices <- filter(all_devices, 
+                              type %in% c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO', 'CTD')) %>% 
+            mutate(sensor_dataset_code = paste0('TEMP_DATA_', type))
+        all_devices <- bind_rows(
+            lapply(
+                split(all_devices, list(all_devices$deployment_code, all_devices$sensor_dataset_code)), function(x) {
+            if(nrow(x) <= 1) {
+                return(x)
+            }
+            x$sensor_dataset_code <- paste0(x$sensor_dataset_code, seq_len(nrow(x)))
+            x
+        }))
         all_devices
     }),
     # Temp files ----
@@ -512,6 +525,7 @@ list(
     }),
     # Sensor dataset ----
     tar_target(sensor_datasets, {
+        # this is file df
         if(is.null(temp_df)) {
             return(NULL)
         }
@@ -530,6 +544,7 @@ list(
         result$full <- NA
         
         filt_temp <- filter(temp_df, filtered)
+        # matching files filt_temp to devices result
         result <- bind_rows(lapply(split(result, list(result$deployment_code, result$type)), function(x) {
             if(nrow(x) == 0) {
                 return(NULL)
@@ -547,6 +562,7 @@ list(
             if(thisDep == 'NEFSC_SBNMS_202207_SB04' &&
                thisType == 'SOUNDTRAP') {
                 x <- x[x$device_code == 'SOUNDTRAP-671666216', ]
+                x$sensor_dataset_code <- 'TEMP_DATA_SOUNDTRAP'
                 x$full <- grep('671666216', thisMatch$full, value=TRUE)
                 return(x)
             }
@@ -600,35 +616,20 @@ list(
         result <- select(result,
                          'deployment_code',
                          'sensor_dataset_device_code' = 'device_code',
+                         'sensor_dataset_code',
                          'type',
                          'warning',
                          'filename' = 'full') %>% 
             mutate(sensor_dataset_comments = NA,
                    sensor_dataset_variable_code = 'TEMP_C',
-                   organization_code = deployCodeToOrg(deployment_code),
-                   sensor_dataset_code = paste0('TEMP_DATA_', type))
-        result <- bind_rows(lapply(split(result, list(result$deployment_code, result$sensor_dataset_code)), function(x) {
-            if(nrow(x) <= 1) {
-                return(x)
-            }
-            x$sensor_dataset_code <- paste0(x$sensor_dataset_code, seq_len(nrow(x)))
-            x
-        }))
+                   organization_code = deployCodeToOrg(deployment_code))
+
         ## ST calibration ----
         result$sensor_dataset_comments[result$type == 'SOUNDTRAP'] <- 
             'Calibration applied: Tc = Tm - (-0.060*Tm - 1.26), where Tm is measured temperature'
         result$sensor_dataset_comments[result$type == 'FPOD'] <- 
             'Data have been aggregated to hourly mean values from the original 1-minute resolution. Full resolution data can be found at the sensor_dataset_uri'
-        result$value <- lapply(result$filename, function(x) {
-            if(is.na(x)) {
-                return(NULL)
-            }
-            if(!file.exists(x)) {
-                warning('File ', sensor_datasets$filename[i], ' does not exist')
-                return(NULL)
-            }
-            read.csv(x, stringsAsFactors = FALSE)
-        })
+       
         result$sensor_dataset_uri <- gsub('Z:', 'gs://nefsc-1-pab', result$filename)
         
         result
@@ -644,8 +645,16 @@ list(
         # do format
         temp <- vector('list', length=nrow(result))
         for(i in seq_along(temp)) {
+            if(is.na(result$filename[i])) {
+                next
+            }
+            if(!file.exists(result$filename[i])) {
+                warning('File ', result$filename[i], ' does not exist')
+                next
+            }
+            val <- read.csv(result$filename[i], stringsAsFactors = FALSE)
             val <- formatSensorValues(
-                result$value[[i]], 
+                val, 
                 type=tolower(result$type[i]), 
                 name=basename(result$filename[i])
             )
