@@ -495,7 +495,7 @@ checkMakTemplate <- function(x, templates=NULL, ncei=FALSE, dropEmpty=FALSE, dro
                                     table=n,
                                     type='JSON Field NA',
                                     message=paste0('JSON field(s) ',
-                                                   printN(naFields[naJson], Inf),
+                                                   naFields[naJson],
                                                    ' in column ', j, ' are NA')
                 )
                 
@@ -1433,4 +1433,43 @@ fillFromOther <- function(x, y, cols, by, onlyFillNA=FALSE, fillWithNA=FALSE, ve
         cat('Changed', nFilled, 'values')
     }
     x
+}
+
+addJSONField <- function(x, name, value, toNumeric=FALSE, skipNA=FALSE, split=NULL, forceArray=FALSE) {
+    if(length(x) > 1) {
+        if(length(value) == 1) {
+            value <- rep(value, length(x))
+        }
+        if(length(value) != length(x)) {
+            stop('Mismatched lengths for JSON fields')
+        }
+        for(i in seq_along(x)) {
+            val <- value[i]
+            if(is.list(val)) {
+                # val <- val[[1]] # this was previously used by split() on a column
+            }
+            x[i] <- addJSONField(x[i], name, val, toNumeric=toNumeric, split=split, forceArray = forceArray)
+        }
+        return(x)
+    }
+    if(isTRUE(skipNA) && is.na(value)) {
+        return(x)
+    }
+    if(is.na(x)) {
+        x <- list()
+    } else {
+        x <- fromJSON(x, simplify=FALSE)
+    }
+    if(!is.null(split)) {
+        value <- strsplit(value, split=split)[[1]]
+    }
+    if(isTRUE(toNumeric)) {
+        value <- as.numeric(value)
+    }
+    if(isTRUE(forceArray) && 
+       length(value) == 1 && !is.list(value)) {
+        value <- list(value)
+    }
+    x[[name]] <- value
+    toJSON(x)
 }
