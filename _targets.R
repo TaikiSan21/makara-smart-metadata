@@ -46,8 +46,8 @@ list(
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8024',
                                    'NEFSC_TEMP-EXP_202503_AVAST_ST8546'),
             # device types to export temp data for, future vemco/st only
-            'temp_sensor_types' = c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO', 'CTD'),
-            # 'temp_sensor_types' = c('SOUNDTRAP', 'VEMCO'),
+            # 'temp_sensor_types' = c('FPOD', 'HOBO', 'SOUNDTRAP', 'TEMPERATURE_SENSOR', 'VEMCO', 'CTD'),
+            'temp_sensor_types' = c('SOUNDTRAP', 'VEMCO'),
             # Whether or not to export data already present in DB TRUE/FALSE,
             'export_already_in_db' = TRUE,
             # Allow replacing non-NA database values with NA - almost always FALSE
@@ -55,7 +55,7 @@ list(
             # keep extra columns with output - for testing
             'keep_extra_columns' = FALSE,
             'skip_temperature' = FALSE,
-            'load_previous_temp' = TRUE,
+            'load_previous_temp' = FALSE,
             'update_device_orgs' = TRUE,
             # set this to TRUE to remove mandatory fields with NA values
             'drop_mandatory_na' = FALSE
@@ -369,6 +369,7 @@ list(
         result
     }),
     # Temp devices ----
+    # all smartsheet and db temp devices
     tar_target(temp_devices, {
         # dropIx <- which(st_deployment_raw$Status == 'Deployed' &
         #                     st_deployment_raw$Name == 'NEFSC_VA_202409_PWNVA01')
@@ -467,6 +468,55 @@ list(
             x$sensor_dataset_code <- paste0(x$sensor_dataset_code, seq_len(nrow(x)))
             x
         }))
+        # drop drifter vemcos ----
+        drifterVemco <- grepl('NEFSC_NE-OFFSHORE_.*_DRIFT.*', all_devices$deployment_code) &
+            all_devices$type == 'VEMCO'
+        all_devices <- all_devices[!drifterVemco, ]
+        parksVemco <- grepl('PARKSAUS', all_devices$deployment_code) &
+            all_devices$type == 'VEMCO'
+        all_devices <- all_devices[!parksVemco, ]
+        # drop lost or unusable soundtraps ----
+        recs <- distinct(bind_rows(
+            select(db$recordings,  deployment_code, recording_device_lost, recording_code, recording_quality_type_code),
+            select(combined_deprec$recordings, deployment_code, recording_device_lost, recording_code, recording_quality_type_code=recording_quality_code)
+        ))
+        deps <- distinct(bind_rows(
+            select(db$deployments, deployment_code, deployment_device_codes),
+            select(combined_deprec$deployments, deployment_code, deployment_device_codes)
+        ))
+        lost <- filter(recs, recording_device_lost == TRUE)$deployment_code
+        unusable <- filter(recs, grepl('SOUNDTRAP', recording_code), recording_quality_type_code == 'UNUSABLE')$deployment_code
+        
+        depLost <- filter(deps, deployment_code %in% lost) %>% 
+            mutate(device_code = strsplit(deployment_device_codes, ',')) %>% 
+            unnest(device_code) %>% 
+            filter(grepl('SOUNDTRAP', device_code))
+        depUnusable <- filter(deps, deployment_code %in% unusable) %>% 
+            mutate(device_code = strsplit(deployment_device_codes, ',')) %>% 
+            unnest(device_code) %>% 
+            filter(grepl('SOUNDTRAP', device_code))
+        all_devices <- doJoinCheck(all_devices, depLost, by=c('deployment_code'), verbose=FALSE) %>% 
+            filter(new) %>% 
+            doJoinCheck(depUnusable, by=c('deployment_code', 'device_code'), verbose=FALSE) %>% 
+            filter(new)
+        # manual removal ----
+        manualDrops <- tribble(
+            ~deployment_code, ~type,
+            'NEFSC_GOM_202010_PETITMANAN', 'SOUNDTRAP',
+            'NEFSC_GOM_202308_MDR', 'VEMCO', #vemco lost
+            'NEFSC_GOM_202401_MDR', 'VEMCO', #vemco lost
+            'NEFSC_GOM_202112_SEALISLAND', 'VEMCO', #vemco dat empty,
+            'NEFSC_GOM_202211_USTR10', 'VEMCO',
+            'NEFSC_GOM_202401_USTR07', 'VEMCO',
+            'TNC_VA_202402_CVOW01', 'VEMCO',
+            'TNC_VA_202402_CVOW11', 'VEMCO',
+            'TNC_VA_202402_CVOW24', 'VEMCO',
+            'TNC_VA_202402_CVOW25', 'VEMCO',
+            'TNC_VA_202406_CVOW11', 'VEMCO',
+            'TNC_VA_202406_CVOW24', 'VEMCO',
+        )
+        all_devices <- doJoinCheck(all_devices, manualDrops, by=c('deployment_code', 'type'), verbose=FALSE) %>% 
+            filter(new)
         all_devices
     }),
     # Temp files ----
@@ -506,21 +556,21 @@ list(
                 ))
         # try to find deployments that just need filtering
         # these deps are known problems so ignore
-        knownDeps <- c('NEFSC_GOM_202112_SEALISLAND', 
-                       'NEFSC_SBNMS_202108_OLE01', 
-                       'NEFSC_SBNMS_202209_OLE01')
-        needsFilt <- filedf %>% 
-            filter(!is.na(type)) %>% 
-            group_by(deployment_code, type) %>% 
-            summarise(nFilt = sum(filtered),
-                      files = paste0(file, collapse=','),
-                      fulls = paste0(full, collapse=',')) %>% 
-            filter(nFilt == 0,
-                   !deployment_code %in% knownDeps) # dropping old mari_site01 folders
-        if(nrow(needsFilt) > 0) {
-            warning(nrow(needsFilt), ' deployments (', printN(needsFilt$deployment_code), 
-                    ') need to have filtering done on temperature files')
-        }
+        # knownDeps <- c('NEFSC_GOM_202112_SEALISLAND', 
+        #                'NEFSC_SBNMS_202108_OLE01', 
+        #                'NEFSC_SBNMS_202209_OLE01')
+        # needsFilt <- filedf %>% 
+        #     filter(!is.na(type)) %>% 
+        #     group_by(deployment_code, type) %>% 
+        #     summarise(nFilt = sum(filtered),
+        #               files = paste0(file, collapse=','),
+        #               fulls = paste0(full, collapse=',')) %>% 
+        #     filter(nFilt == 0,
+        #            !deployment_code %in% knownDeps) # dropping old mari_site01 folders
+        # if(nrow(needsFilt) > 0) {
+        #     warning(nrow(needsFilt), ' deployments (', printN(needsFilt$deployment_code), 
+        #             ') need to have filtering done on temperature files')
+        # }
         filedf
     }),
     # Sensor dataset ----
@@ -529,6 +579,7 @@ list(
         if(is.null(temp_df)) {
             return(NULL)
         }
+        # this is all smartsheet and db devices
         result <- temp_devices
         depsToUse <- st_deployment$deployments$deployment_code[
             st_deployment$deployments$deployment_status != 'Deployed'
@@ -541,8 +592,27 @@ list(
         result <- filter(result, 
                          deployment_code %in% depsToUse,
                          type %in% params$temp_sensor_types)
-        result$full <- NA
         
+        result$full <- NA
+        # try to find deployments that just need filtering
+        # these deps are known problems so ignore
+        knownDeps <- c('NEFSC_GOM_202112_SEALISLAND', 
+                       'NEFSC_SBNMS_202108_OLE01', 
+                       'NEFSC_SBNMS_202209_OLE01')
+        needsFilt <- temp_df %>% 
+            filter(!is.na(type),
+                   type %in% params$temp_sensor_types,
+                   deployment_code %in% depsToUse) %>% 
+            group_by(deployment_code, type) %>%
+            summarise(nFilt = sum(filtered),
+                      files = paste0(file, collapse=','),
+                      fulls = paste0(full, collapse=',')) %>% 
+            filter(nFilt == 0,
+                   !deployment_code %in% knownDeps) # dropping old mari_site01 folders
+        if(nrow(needsFilt) > 0) {
+            warning(nrow(needsFilt), ' deployments (', printN(needsFilt$deployment_code), 
+                    ') need to have filtering done on temperature files')
+        }
         filt_temp <- filter(temp_df, filtered)
         # matching files filt_temp to devices result
         result <- bind_rows(lapply(split(result, list(result$deployment_code, result$type)), function(x) {
@@ -610,7 +680,14 @@ list(
             }
             x
         }))
-        
+        if(isFALSE(params$load_previous_temp)) {
+            result <- doJoinCheck(result,
+                                  db$sensor_datasets,
+                                  by=c('deployment_code', 'sensor_dataset_code'),
+                                  verbose=FALSE
+            ) %>% 
+                filter(new)
+        }
         noDevice <- is.na(result$device_code)
         
         result <- select(result,
@@ -669,10 +746,42 @@ list(
             select(
                 organization_code,
                 deployment_code,
+                filename,
+                sensor_dataset_device_code,
                 sensor_dataset_code,
                 sensor_value_datetime,
                 sensor_value_value)
         result
+    }, cue=tar_cue('always')),
+    tar_target(sensor_plots, {
+        # reset first
+        plotdir <- 'outputs/temp_plots'
+        plotfiles <- list.files(plotdir, full.names=TRUE)
+        unlink(plotfiles)
+        result <- split(sensor_values, list(sensor_values$deployment_code,
+                                            sensor_values$sensor_dataset_device_code), drop=TRUE)
+        lapply(result, function(x) {
+            filename <- paste0(
+                x$deployment_code[1],
+                '-',
+                x$sensor_dataset_device_code[1],
+                '.png')
+            filename <- file.path(plotdir, filename)
+            plotname <- paste0(
+                x$deployment_code[1],
+                '-',
+                x$sensor_dataset_device_code[1],
+                '\n',
+                basename(x$filename[1])
+            )
+            png(filename, width=600, height=400, units='px')
+            plot(x=x$sensor_value_datetime,
+                 y=x$sensor_value_value,
+                 main=plotname,
+                 type='l')
+            dev.off()
+            
+        })
     }),
     # FPOD ----
     tar_target(fpod_times, {
@@ -690,7 +799,7 @@ list(
         data
     }, cue=tar_cue('always')),
     # combine sources ----
-    tar_target(combined_data, {
+    tar_target(combined_deprec, {
         # removing one NA deployment
         dep <- st_deployment$deployments %>% 
             filter(!is.na(deployment_status)) %>% 
@@ -776,9 +885,21 @@ list(
                         by=c('deployment_code', 'device_code'),
                         relationship='one-to-one')
             } else {
+                thisDep <- filter(dep, deployment_code %in% x$deployment_code)
+                multi <- table(thisDep$deployment_code) > 1
+                if(any(multi)) {
+                    warning('Deployments ', printN(names(which(multi))),
+                            ' have multiple Smartsheets entries unexpectedly,',
+                            ' using only first row temporarily. Correct in',
+                            ' Smartsheets and re-run')
+                    thisDep <- thisDep %>% 
+                        group_by(deployment_code) %>% 
+                        slice(1) %>% 
+                        ungroup()
+                }
                 x <- left_join(
                     x,
-                    dep,
+                    thisDep,
                     by='deployment_code',
                     relationship='one-to-one')
             }
@@ -952,15 +1073,32 @@ list(
                                  nrs_deployment,
                       cols=c('recording_code', 'recording_device_codes', 'recording_device_depth_m'),
                       by='deployment_code')
+        dep_out$deployment_device_codes[dep_out$deployment_device_codes == ''] <- NA
+        rec_devices <- rec_out %>% 
+            mutate(all_devices = paste0(recording_device_codes, collapse=','), .by=deployment_code) %>% 
+            select(deployment_code, all_devices) %>% 
+            distinct()
+        
+        dep_out <- dep_out %>% 
+            left_join(rec_devices, by='deployment_code')
+        dep_out <- unite(dep_out, 'deployment_device_codes', c('deployment_device_codes', 'all_devices'),
+                    sep=',', na.rm=TRUE)
         out <- list(deployments=dep_out,
                     recordings=rec_out)
         
         if(nrow(rec_int_out) > 0) {
             out$recording_intervals <- rec_int_out
         }
+        out
+    }),
+    tar_target(combined_data, {
+        out <- combined_deprec
         if(!is.null(sensor_datasets)) {
+            # filter sensor datasets ----
+            #i think we just want to check that metadata exists
             depsToUpload <- unique(c(out$deployments$deployment_code,
-                                     out$recordings$deployment_code))
+                                     out$recordings$deployment_code,
+                                     db$deployments$deployment_code))
             sd <- filter(sensor_datasets, deployment_code %in% depsToUpload)
             noFile <- is.na(sd$filename)
             if(any(noFile)) {
@@ -972,10 +1110,11 @@ list(
                     table='sensor_datasets',
                     message=paste0("No temperature file found for device '",
                                    sd$sensor_dataset_device_code[noFile], '"'))
+                sd <- filter(sd, !is.na(filename))
             }
             out$sensor_datasets <- sd
             out$sensor_values <- filter(sensor_values, deployment_code %in% depsToUpload)
-        }
+        } 
         out
     }),
     # final checks ----
