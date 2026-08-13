@@ -514,6 +514,8 @@ list(
             'TNC_VA_202402_CVOW25', 'VEMCO',
             'TNC_VA_202406_CVOW11', 'VEMCO',
             'TNC_VA_202406_CVOW24', 'VEMCO',
+            'MIT_SBNMS_202506_SBV01', 'VEMCO',
+            'MIT_SBNMS_202506_SBV01', 'SOUNDTRAP',
         )
         all_devices <- doJoinCheck(all_devices, manualDrops, by=c('deployment_code', 'type'), verbose=FALSE) %>% 
             filter(new)
