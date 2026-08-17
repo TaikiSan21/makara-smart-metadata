@@ -756,6 +756,9 @@ list(
         result
     }, cue=tar_cue('always')),
     tar_target(sensor_plots, {
+        if(is.null(sensor_values)) {
+            return(NULL)
+        }
         # reset first
         plotdir <- 'outputs/temp_plots'
         plotfiles <- list.files(plotdir, full.names=TRUE)
