@@ -1466,7 +1466,7 @@ addJSONField <- function(x, name, value, toNumeric=FALSE, skipNA=FALSE, split=NU
             if(is.list(val)) {
                 # val <- val[[1]] # this was previously used by split() on a column
             }
-            x[i] <- addJSONField(x[i], name, val, toNumeric=toNumeric, split=split, forceArray = forceArray)
+            x[i] <- addJSONField(x[i], name, val, toNumeric=toNumeric, skipNA=skipNA, split=split, forceArray = forceArray)
         }
         return(x)
     }
