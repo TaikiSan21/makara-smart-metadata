@@ -65,7 +65,7 @@ list(
     # Put any hard coded values here for transparency
     tar_target(constants, {
         list(
-            'platform' = 'BOTTOM_MOUNTED_MOORING',
+            # 'platform' = 'BOTTOM_MOUNTED_MOORING',
             'fpod_duration' = 3600,
             'fpod_interval' = 3600,
             'fpod_sr' = 1000,
@@ -835,7 +835,13 @@ list(
         # result <- result %>%
         #     filter(pacm_db_status %in% params$pacm_status_to_export)
         
-        result$deployment_platform_type_code <- constants$platform
+        # result$deployment_platform_type_code <- constants$platform
+        result <- mutate(result,
+                         deployment_platform_type_code = case_when(
+                             grepl('_DRIFT[0-9]+', deployment_code) ~ 'DRIFTING_BUOY',
+                             .default = 'BOTTOM_MOUNTED_MOORING'
+                         )
+        )
         if(length(params$skip_deployments) > 0) {
             dropIx <- result$deployment_code %in% params$skip_deployments
             if(any(dropIx)) {
@@ -1012,7 +1018,7 @@ list(
         rec_int_out <- rec_int_google
         rec_int_out$multiRecorder <- rec_int_out$deployment_code %in% multiRecorderDep
         rec_int_out <-  bind_rows(lapply(split(rec_int_out, rec_int_out$multiRecorder), function(x) {
-            if(isTRUE(x$multiRecorder)) {
+            if(isTRUE(x$multiRecorder[1])) {
                 left_join(x,
                           select(result, deployment_code, st_serial_number, recording_code, organization_code),
                           by=c('deployment_code', 'st_serial_number'),
@@ -1080,7 +1086,7 @@ list(
                       by='deployment_code')
         dep_out$deployment_device_codes[dep_out$deployment_device_codes == ''] <- NA
         rec_devices <- rec_out %>% 
-            mutate(all_devices = paste0(recording_device_codes, collapse=','), .by=deployment_code) %>% 
+            mutate(all_devices = paste0(recording_device_codes[!is.na(recording_device_codes)], collapse=','), .by=deployment_code) %>% 
             select(deployment_code, all_devices) %>% 
             distinct()
         
