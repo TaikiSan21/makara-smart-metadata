@@ -761,6 +761,9 @@ list(
         }
         # reset first
         plotdir <- 'outputs/temp_plots'
+        if(!dir.exists(plotdir)) {
+            dir.create(plotdir)
+        }
         plotfiles <- list.files(plotdir, full.names=TRUE)
         unlink(plotfiles)
         result <- split(sensor_values, list(sensor_values$deployment_code,
