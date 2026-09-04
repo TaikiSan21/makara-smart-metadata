@@ -34,7 +34,7 @@ myRenamer <- function(x, map) {
 
 # combines a bunch of columns into one, optionally adding a prefix
 # to each column entry if it is not NA
-combineColumns <- function(x, into, columns, prefix=NULL, sep='; ', warnMissing=TRUE) {
+combineColumns <- function(x, into, columns, prefix=NULL, sep='; ', warnMissing=TRUE, remove=TRUE) {
     missing <- !columns %in% names(x)
     if(all(missing)) {
         warning('None of the column(s) ',
@@ -54,22 +54,37 @@ combineColumns <- function(x, into, columns, prefix=NULL, sep='; ', warnMissing=
     }
     if(!is.null(prefix)) {
         prefix <- prefix[!missing]
+        if(isFALSE(remove)) {
+            TEMP_COLS <- paste0(columns, '_TEMP')
+        }
         for(i in seq_along(columns)) {
+            if(isFALSE(remove)) {
+                x[[TEMP_COLS[i]]] <- x[[columns[i]]]
+            }
             x[[columns[i]]] <- if_else(is.na(x[[columns[i]]]) | x[[columns[i]]] == '', NA_character_, 
                                        paste0(prefix[i], x[[columns[i]]]))
         }
     }
-    x <- unite(x, !!into, any_of(c(into, columns)), sep=sep, na.rm=TRUE)
+    x <- unite(x, !!into, any_of(c(into, columns)), sep=sep, na.rm=TRUE, remove=remove)
+    if(isFALSE(remove)) {
+        for(i in seq_along(columns)) {
+            if(columns[i] != into) {
+                x[[columns[i]]] <- x[[TEMP_COLS[i]]]
+            }
+            x[[TEMP_COLS[i]]] <- NULL
+        }
+    }
     x
 }
 
 # pretty printing helper to print number of items in a list
 # n is a cutoff of max to show at once
-printN <- function(x, n=6, collapse=', ') {
+printN <- function(x, n=6, collapse=', ', maxChar=200L) {
     nItems <- length(x)
     if(nItems == 0) {
         return('')
     }
+    x <- substr(x, 1, maxChar)
     if(nItems > n) {
         x <- c(x[1:n], paste0('... (', nItems-n, ' more not shown)'))
     }
@@ -85,10 +100,11 @@ psxTo8601 <- function(x) {
         warning('Must be POSIXct or character')
         return(x)
     }
-    if(tz(x) != 'UTC') {
-        warning('Non-UTC timezone not yet supported')
-    }
-    format(x, format='%Y-%m-%dT%H:%M:%SZ')
+    # if(tz(x) != 'UTC') {
+    #     warning('Non-UTC timezone not yet supported')
+    # }
+    # format(x, format='%Y-%m-%dT%H:%M:%SZ')
+    format_ISO8601(x, usetz='Z')
 }
 
 # create a POSIXct or full datetime character from separate date
@@ -269,6 +285,7 @@ checkMakTemplate <- function(x, templates=NULL, ncei=FALSE, dropEmpty=FALSE, dro
             }
             if(m == 'recording_timezone') {
                 badTz <- !grepl('^UTC[+-]?[0-9:]{0,5}$', thisData[[m]])
+                badTz <- badTz & !is.na(thisData[[m]])
                 if(any(badTz)) {
                     warns <- addWarning(warns, 
                                         deployment=thisData$deployment_code[badTz],
@@ -619,7 +636,7 @@ checkDbValues <- function(x, db=NULL, updateOrgs=TRUE) {
         )
         db$sites <- distinct(select(db$sites, organization_code, site_code))
     }
-
+    
     warns <- vector('list', length=0)
     # check org codes exist
     allOrgs <- unique(unlist(lapply(x, function(df) {
@@ -775,7 +792,8 @@ joinRequirements <- list(
     'recording_intervals' = c('deployment_code', 'recording_code', 'recording_interval_start_datetime'),
     'analyses' = c('deployment_organization_code', 'deployment_code', 'analysis_code'),
     'tracks' = c('organization_code', 'deployment_code', 'track_code'),
-    'sensor_datasets' = c('organization_code', 'deployment_code', 'sensor_dataset_code')
+    'sensor_datasets' = c('organization_code', 'deployment_code', 'sensor_dataset_code'),
+    'devices' = c('organization_code', 'device_code')
 )
 if(packageVersion('makaraValidatr') >= '0.5.0') {
     joinRequirements$analyses <- c('organization_code', 'deployment_code', 'analysis_code', 'deployment_organization_code')
@@ -830,12 +848,20 @@ checkAlreadyDb <- function(x, db, verbose=TRUE) {
     x
 }
 
-checkDetectionData <- function(x) {
+checkDetectionData <- function(x, db) {
     # only if dets and ana are in
     if(!all(c('detections', 'analyses') %in% names(x))) {
         return(x)
     }
-    # want to check det codes are in ana
+    if('deployments' %in% names(x)) {
+        db$deployments <- bind_rows(
+            db$deployments,
+            select(x$deployments, deployment_code, organization_code)
+        )
+    }
+    warns <- vector('list', length=0)
+    # check ana dep_code is in metadata, drop detections if not
+    # probably also check ana recording code? later- less important
     dets <- distinct(select(x$detections,
                             deployment_code,
                             analysis_code,
@@ -844,12 +870,24 @@ checkDetectionData <- function(x) {
                            deployment_code, 
                            analysis_code,
                            analysis_sound_source_codes))
-    orgFix <- fixOrgPrefix(ana, columns=c('deployment_code', 'analysis_code'))
-    for(c in names(orgFix)) {
-        ana[[c]] <- orgFix[[c]]$new
+    anaMeta <- doJoinCheck(ana, db$deployments, by=c('deployment_code'), verbose=FALSE,
+                           fixOrgs=TRUE)
+    if(any(anaMeta$new)) {
+        dropDep <- anaMeta$deployment_code[anaMeta$new]
+        warns <- addWarning(warns,
+                            deployment=dropDep,
+                            row=which(anaMeta$new),
+                            type='deployment_code is not in db',
+                            table='analyses',
+                            message=paste0("deployment_code '", dropDep,
+                                           "' is not in Makara, metadata must be uploaded before detections")
+        )
+        x$detections <- filter(x$detections, !deployment_code %in% dropDep)
     }
-    warns <- vector('list', length=0)
-    anaCheck <- doJoinCheck(dets, ana, by=c('deployment_code', 'analysis_code'), verbose=F)
+    
+    # want to check det codes are in ana
+    anaCheck <- doJoinCheck(dets, ana, by=c('deployment_code', 'analysis_code'), 
+                            fixOrgs = TRUE, verbose=F)
     if(any(anaCheck$new)) {
         warns <- addWarning(warns, 
                             deployment=anaCheck$deployment_code[anaCheck$new],
@@ -864,7 +902,8 @@ checkDetectionData <- function(x) {
     ana <- ana  %>% 
         mutate(detection_sound_source_code = strsplit(analysis_sound_source_codes, ',')) %>% 
         unnest(detection_sound_source_code)
-    speciesCheck <- doJoinCheck(dets, ana, by=c('deployment_code', 'analysis_code', 'detection_sound_source_code'), verbose=F)
+    speciesCheck <- doJoinCheck(dets, ana, by=c('deployment_code', 'analysis_code', 'detection_sound_source_code'), 
+                                fixOrgs=TRUE, verbose=F)
     if(any(speciesCheck$new)) {
         warns <- addWarning(warns, 
                             deployment=speciesCheck$deployment_code[speciesCheck$new],
@@ -1380,7 +1419,7 @@ squishList <- function(myList, unique=FALSE) {
             names(thisNameData) <- gsub(paste0(n, '\\.'), '', names(thisNameData))
             squishList(thisNameData, unique)
             # } else if(all(thisClasses=='data.frame')) {
-        } else if(all(sapply(thisNameData, function(x) inherits(x, 'data.frame')))) {
+        } else if(all(sapply(thisNameData, function(x) (is.null(x) || inherits(x, 'data.frame'))))) {
             if(isTRUE(unique)) {
                 distinct(bind_rows(thisNameData))
             } else {
