@@ -18,7 +18,7 @@ tar_source('functions/makara-functions.R')
 tar_source('functions/nefsc-metadata-functions.R')
 
 # Set TRUE to force re-loading BigQuery database
-reload_database <- FALSE
+reload_database <- TRUE
 
 ### dont change below ###
 if(!tar_exist_objects('db_raw')) {
@@ -252,7 +252,8 @@ list(
             'Temp. Logger ID #:' = 'temp_number',
             'Sat. Tracker Model?' = 'satellite_model',
             'Sat. Tracker Serial Number' = 'satellite_number',
-            'Recording URI' = 'recording_uri'
+            'Recording URI' = 'recording_uri',
+            'Choose Drifter Name' = 'drifter_name'
         )
         depCols <- c(
             # 'organization_code',
@@ -305,8 +306,10 @@ list(
         deployment <- unite(deployment, 'satellite_code', c('satellite_model', 'satellite_number'),
                             sep='-', na.rm=TRUE)
         deployment$satellite_code[deployment$satellite_code == ''] <- NA
+        deployment$drifter_name[deployment$drifter_name == ''] <- NA
+        deployment$drifter_name <- gsub(' ', '', toupper(deployment$drifter_name))
         deployment <- unite(deployment, 'deployment_device_codes', 
-                            c('temp_code', 'release_code', 'satellite_code'),
+                            c('temp_code', 'release_code', 'satellite_code', 'drifter_name'),
                             na.rm=TRUE, sep=',')
         deployment$deployment_water_depth_m <- as.numeric(deployment$deployment_water_depth_m)
         deployment$recording_device_depth_m <- as.numeric(deployment$recording_device_depth_m)
