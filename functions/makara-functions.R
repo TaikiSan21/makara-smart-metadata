@@ -212,13 +212,15 @@ checkMakTemplate <- function(x, templates=NULL, ncei=FALSE, dropEmpty=FALSE, dro
         # checking that i didnt goof mandatory names
         missMand <- !thisMand  %in% names(thisTemp)
         if(any(missMand)) {
-            warning(sum(missMand), ' misspelled mandatory names for ', n,
+            warning(sum(missMand), ' misspelled mandatory names for ', 
+                    n, ': ',
                     printN(thisMand[missMand]))
         }
         if(isTRUE(ncei)) {
             missNcei <- !thisNcei %in% names(thisTemp)
             if(any(missNcei)) {
-                warning(sum(missNcei), 'misspelled ncei names for ', n, 
+                warning(sum(missNcei), 'misspelled ncei names for ', 
+                        n, ': ', 
                         printN(thisNcei[missNcei]))
             }
             missNcei <- !thisNcei %in% names(thisData)
@@ -243,7 +245,7 @@ checkMakTemplate <- function(x, templates=NULL, ncei=FALSE, dropEmpty=FALSE, dro
         uniqueCols <- uniqueConditions[[n]]
         if(!is.null(uniqueCols)) {
             checkDupeDeps <- thisData %>% 
-                summarise(dupe = n() > 1, .by=all_of(uniqueCols))
+                summarise(dupe = n() > 1, .by=any_of(uniqueCols))
             dupeDeps <- checkDupeDeps$dupe
             codePrint <- paste0('"', paste0(uniqueCols, collapse='-'), '"')
             if(any(dupeDeps)) {
@@ -941,9 +943,13 @@ doJoinCheck <- function(x, y, by, name=NULL, ix=FALSE,
                 }
             }
         }
-        orgFix <- fixOrgPrefix(x, columns=xBy, orgCol=orgCol)
-        for(c in names(orgFix)) {
-            x[[c]] <- orgFix[[c]]$new
+        orgFixX <- fixOrgPrefix(x, columns=xBy, orgCol=orgCol)
+        for(c in names(orgFixX)) {
+            x[[c]] <- orgFixX[[c]]$new
+        }
+        orgFixY <- fixOrgPrefix(y, columns=xBy, orgCol=orgCol)
+        for(c in names(orgFixY)) {
+            y[[c]] <- orgFixY[[c]]$new
         }
     }
     y$JOINCHECK <- TRUE
@@ -963,8 +969,11 @@ doJoinCheck <- function(x, y, by, name=NULL, ix=FALSE,
         message(sum(newX), ' out of ', nrow(x), name, ' are new (not yet in Makara)')
     }
     if(fixOrgs) {
-        for(c in names(orgFix)) {
-            x[[c]] <- orgFix[[c]]$orig
+        for(c in names(orgFixX)) {
+            x[[c]] <- orgFixX[[c]]$orig
+        }
+        for(c in names(orgFixY)) {
+            y[[c]] <- orgFixY[[c]]$orig
         }
     }
     x
@@ -1025,10 +1034,15 @@ fixUTF8 <- function(x) {
 }
 
 # writes template formatted CSV files to a folder - last step
-writeTemplateOutput <- function(data, folder='outputs') {
+writeTemplateOutput <- function(data, folder='outputs', splitOrgs=TRUE) {
     if(!dir.exists(folder)) {
         dir.create(folder)
     }
+    orgs <- unlist(sapply(data, function(x) {
+        if('organization_code' %in% names(x)) {
+            return(unique(x$organization_code))
+        }
+        NULL}))
     for(n in names(data)) {
         outFile <- file.path(folder, paste0(n, '.csv'))
         if(length(data[[n]]) == 0) {
@@ -1037,6 +1051,28 @@ writeTemplateOutput <- function(data, folder='outputs') {
         data[[n]] %>% 
             fixUTF8 %>% 
             write.csv(file=outFile, row.names=FALSE, na='')
+        if(isFALSE(splitOrgs)) {
+            next
+        }
+        if(!'organization_code' %in% names(data[[n]])) {
+            next
+        }
+        lapply(
+            split(data[[n]], data[[n]]$organization_code), function(x) {
+                if(is.null(x) ||
+                   nrow(x) == 0) {
+                    return()
+                }
+                outDir <- file.path(folder, x$organization_code[1])
+                if(!dir.exists(outDir)) {
+                    dir.create(outDir)
+                }
+                outFile <- file.path(outDir, paste0(n, '.csv'))
+                x %>% 
+                    fixUTF8 %>% 
+                    write.csv(file=outFile, row.names=FALSE, na='')
+            }
+        )
     }
 }
 
