@@ -38,7 +38,7 @@ list(
         list(
             # possible options 'READY', 'PENDING', 'IMPORTED', 'LOST', 'NA'
             'pacm_status_to_export' = c('READY'),
-            # 'pacm_status_to_export' = c('PENDING'),
+            # 'pacm_status_to_export' = c('READY', 'IMPORTED'),
             # 'pacm_status_to_export' = c('READY', 'NA'),
             # 'pacm_status_to_export' = c('READY', 'PENDING', 'IMPORTED'),
             # identify specific deployments to skip, if wanted
@@ -296,13 +296,25 @@ list(
             release_model = gsub('VR2AR', 'VEMCO', release_model),
             satellite_model = gsub('APOLLO X1', 'SATELLITE_TRACKER', satellite_model),
             satellite_model = gsub('SOLARONE', 'SATELLITE_TRACKER', satellite_model),
-            release_number = gsub('\\*\\*', '', release_number))
+            release_number = gsub('\\*\\*', '', release_number),
+            release_number = gsub(' ', '', release_number))
         deployment <- unite(deployment, 'temp_code', c('temp_model', 'temp_number'),
                             sep='-', na.rm=TRUE)
         deployment$temp_code[deployment$temp_code == ''] <- NA
-        deployment <- unite(deployment, 'release_code', c('release_model', 'release_number'),
-                            sep='-', na.rm=TRUE)
-        deployment$release_code[deployment$release_code == ''] <- NA
+        
+        deployment <- deployment %>% 
+            rowwise() %>% 
+            mutate(release_number = strsplit(release_number, ';'),
+                release_code = if_else(!is.na(release_model),
+                                          paste0(release_model, '-',
+                                                 release_number, collapse=','),
+                                       NA
+                )
+            ) %>% 
+            ungroup()
+        # deployment <- unite(deployment, 'release_code', c('release_model', 'release_number'),
+        #                     sep='-', na.rm=TRUE)
+        # deployment$release_code[deployment$release_code == ''] <- NA
         deployment <- unite(deployment, 'satellite_code', c('satellite_model', 'satellite_number'),
                             sep='-', na.rm=TRUE)
         deployment$satellite_code[deployment$satellite_code == ''] <- NA
