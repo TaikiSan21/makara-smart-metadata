@@ -93,6 +93,9 @@ printN <- function(x, n=6, collapse=', ', maxChar=200L) {
 
 # formats a POSIXct object to 8601 format
 psxTo8601 <- function(x) {
+    if(all(is.na(x))) {
+        return(x)
+    }
     if(is.character(x)) {
         return(x)
     }
@@ -585,28 +588,18 @@ makeValidTime <- function(x) {
     if(inherits(x, 'POSIXct')) {
         return(psxTo8601(x))
     }
-    out <- rep(NA_character_, length(x))
-    for(i in seq_along(x)) {
-        val <- x[i]
-        if(is.na(val) || val == '') {
-            next
-        }
-        datetime <- parse_date_time(
-            val,
-            orders=c('%Y-%m-%d %H:%M:%S',
-                     '%Y/%m/%d %H:%M:%S',
-                     '%Y-%m-%dT%H:%M:%SZ',
-                     '%Y-%m-%dT%H:%M:%S%z'),
-            truncated = 3,
-            tz='UTC',
-            quiet=TRUE,
-            exact=TRUE)
-        if(is.na(datetime)) {
-            next
-        }
-        out[i] <- psxTo8601(datetime)
-    }
-    out
+    x[x == ''] <- NA
+    datetime <- parse_date_time(
+        x,
+        orders=c('%Y-%m-%d %H:%M:%S',
+                 '%Y/%m/%d %H:%M:%S',
+                 '%Y-%m-%dT%H:%M:%SZ',
+                 '%Y-%m-%dT%H:%M:%S%z'),
+        truncated = 3,
+        tz='UTC',
+        quiet=TRUE,
+        exact=TRUE)
+    psxTo8601(datetime)
 }
 
 # Check if codes being used are actually in database
