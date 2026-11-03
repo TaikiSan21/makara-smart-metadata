@@ -217,7 +217,7 @@ list(
     tar_target(nrs_deployment, {
         result <- readNRSDeploymentSmart(secrets)
         result
-    }),
+    }, cue=tar_cue('always')),
     # not currently used for anything
     tar_target(instrument_tracking_raw, {
         readInsTrackSmart(secrets)
@@ -422,14 +422,26 @@ list(
             release_model = gsub('VR2AR', 'VEMCO', release_model),
             satellite_model = gsub('APOLLO X1', 'SATELLITE_TRACKER', satellite_model),
             release_number = gsub('\\*\\*', '', release_number))
+        
+        deployment <- deployment %>% 
+            rowwise() %>% 
+            mutate(release_number = strsplit(release_number, ';'),
+                   release_code = if_else(!is.na(release_model),
+                                          paste0(release_model, '-',
+                                                 release_number, collapse=','),
+                                          NA
+                   )
+            ) %>% 
+            ungroup()
+        
         deployment$temp_model[is.na(deployment$temp_number)] <- NA
         deployment <- unite(deployment, 'temp_code', c('temp_model', 'temp_number'),
                             sep='-', na.rm=TRUE)
         deployment$temp_code[deployment$temp_code == ''] <- NA
         deployment$release_model[is.na(deployment$release_number)] <- NA
-        deployment <- unite(deployment, 'release_code', c('release_model', 'release_number'),
-                            sep='-', na.rm=TRUE)
-        deployment$release_code[deployment$release_code == ''] <- NA
+        # deployment <- unite(deployment, 'release_code', c('release_model', 'release_number'),
+        #                     sep='-', na.rm=TRUE)
+        # deployment$release_code[deployment$release_code == ''] <- NA
         deployment$satellite_model[is.na(deployment$satellite_number)] <- NA
         deployment <- unite(deployment, 'satellite_code', c('satellite_model', 'satellite_number'),
                             sep='-', na.rm=TRUE)
@@ -445,7 +457,10 @@ list(
                             c('recording_device', 'temp_code', 'release_code', 'satellite_code', 'fpod_device'),
                             na.rm=TRUE, sep=',')
         deployment <- deployment[c('deployment_code', 'deployment_device_codes')]
-        
+        deployment <- fillFromOther(deployment, 
+                                     rename(nrs_deployment, 'deployment_device_codes' = 'recording_device_codes'),
+                                            cols=c('deployment_device_codes'),
+                                            by='deployment_code')
         temp_devices <- deployment %>% 
             mutate(device_code = strsplit(deployment_device_codes, ',')) %>% 
             unnest(device_code) %>% 
