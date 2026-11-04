@@ -423,6 +423,7 @@ list(
             satellite_model = gsub('APOLLO X1', 'SATELLITE_TRACKER', satellite_model),
             release_number = gsub('\\*\\*', '', release_number))
         
+        deployment$release_model[is.na(deployment$release_number)] <- NA
         deployment <- deployment %>% 
             rowwise() %>% 
             mutate(release_number = strsplit(release_number, ';'),
@@ -438,7 +439,6 @@ list(
         deployment <- unite(deployment, 'temp_code', c('temp_model', 'temp_number'),
                             sep='-', na.rm=TRUE)
         deployment$temp_code[deployment$temp_code == ''] <- NA
-        deployment$release_model[is.na(deployment$release_number)] <- NA
         # deployment <- unite(deployment, 'release_code', c('release_model', 'release_number'),
         #                     sep='-', na.rm=TRUE)
         # deployment$release_code[deployment$release_code == ''] <- NA
