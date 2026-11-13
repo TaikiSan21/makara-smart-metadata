@@ -58,7 +58,7 @@ list(
             'load_previous_temp' = FALSE,
             'update_device_orgs' = TRUE,
             # set this to TRUE to remove mandatory fields with NA values
-            'drop_mandatory_na' = FALSE
+            'drop_mandatory_na' = TRUE
         )
     }),
     # constants ----
@@ -1115,8 +1115,13 @@ list(
         # filling PMEL fields from NRS smartsheet
         rec_out <- fillFromOther(rec_out, 
                                  nrs_deployment,
-                      cols=c('recording_code', 'recording_device_codes', 'recording_device_depth_m'),
+                      # cols=c('recording_code', 'recording_device_codes', 'recording_device_depth_m'),
+                      cols=c('recording_device_codes', 'recording_device_depth_m'),
                       by='deployment_code')
+        isPMEL <- rec_out$organization_code == 'PMEL'
+        rec_out$recording_code[isPMEL] <- gsub('^[A-Z]*_', '', rec_out$recording_code[isPMEL])
+        rec_out$recording_code[isPMEL] <- paste0(round(rec_out$recording_sample_rate_khz[isPMEL], 0),
+                                                 'KHZ_', rec_out$recording_code[isPMEL])
         dep_out$deployment_device_codes[dep_out$deployment_device_codes == ''] <- NA
         rec_devices <- rec_out %>% 
             mutate(all_devices = paste0(recording_device_codes[!is.na(recording_device_codes)], collapse=','), .by=deployment_code) %>% 
@@ -1165,6 +1170,7 @@ list(
     tar_target(db_check, {
         out <- checkAlreadyDb(combined_data, db)
         out <- dropAlreadyDb(out, drop=!params$export_already_in_db)
+        out <- checkDbReplacements(out, db, replaceWithNA = params$replace_db_with_na)
         out <- checkMakTemplate(out,
                                 templates=templates,
                                 # mandatory=mandatory_fields,
@@ -1173,7 +1179,6 @@ list(
                                 dropExtra=!params$keep_extra_columns,
                                 dropMandatoryNA=params$drop_mandatory_na)
         out <- checkDbValues(out, db, updateOrgs=params$update_device_orgs)
-        out <- checkDbReplacements(out, db, replaceWithNA = params$replace_db_with_na)
         checkWarnings(out)
         out
     }),
